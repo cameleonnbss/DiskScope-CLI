@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# DiskScope outputs (generated on the user's machine)
+report.txt
+report.json
+report.html
+report.csv
+*.log
+
+# OS / editor noise
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+.freebuff/
