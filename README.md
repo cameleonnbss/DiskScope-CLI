@@ -1,5 +1,7 @@
 # DiskScope CLI
 
+[![CI](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml)
+
 **Windows Storage Analyzer — 100 % command line, real data only.**
 Scan your drives, find what eats your space, locate old files, detect Steam / Epic / Battle.net / EA / Ubisoft / Riot / GOG games and review a safety-gated cleanup list.
 
