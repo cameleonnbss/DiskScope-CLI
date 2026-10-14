@@ -26,36 +26,38 @@ Everything you see is computed from your actual disk: sizes, dates, games, appli
 | **9 — Recherche** | `/large 10GB`, `/old 1year`, `/files .iso`, `/drive D:`, plain text search |
 | **S — Paramètres** | Dry-run toggle, cache clear, rescan, Store apps on/off |
 
-## Install (Windows 10 / 11, PowerShell or CMD)
+## Run — one file, everything bootstraps itself
+
+**Windows:** double-click (or run) `run.bat` — on first launch it finds Python
+(even when it is not in PATH, via the `py` launcher), creates `.venv`, installs
+`rich` + `send2trash`, then starts the app. Arguments pass straight through:
 
 ```bat
-install.bat
+run.bat --quick
+run.bat --selftest
 ```
 
-Creates `.venv`, installs `rich` + `send2trash`, then runs a self-test.
+**Git Bash / WSL / Linux / macOS dev:** the same thing with one file:
 
-## Run
-
-```bat
-run.bat
+```sh
+./run.sh --selftest
 ```
 
-or from PowerShell:
-
-```powershell
-python main.py
-```
+`install.bat` still works and is just a friendly front-end that runs
+`run.bat --selftest`. Nothing else to wire up — every entry point uses the
+same bootstrap, and the app always runs from its own folder no matter where
+you launch it from.
 
 ### One-shot commands
 
 ```text
-python main.py --quick            drive overview
-python main.py --scan             full scan + summary
-python main.py --report html      build & export report.html
-python main.py --search iso       one-shot search
-python main.py --no-cache         ignore saved cache
-python main.py --selftest         verify installation
-python main.py --empty-bin        empty the Recycle Bin (Windows API)
+run.bat --quick             drive overview
+run.bat --scan              full scan + summary
+run.bat --report html       build & export report.html
+run.bat --search iso        one-shot search
+run.bat --no-cache          ignore saved cache
+run.bat --selftest          verify installation
+run.bat --empty-bin         empty the Recycle Bin (Windows API)
 ```
 
 ## Safety model
@@ -90,6 +92,8 @@ ui.py            rich-based rendering (banner, panels, bars, tables)
 safety.py        guards, trash deletion, dry-run mode
 trash_win.py      Windows Recycle Bin (ctypes + Shell) — Unicode/accents safe
 cache.py         persistent scan cache (atomic writes)
+run.bat          one-file Windows launcher (bootstraps venv + deps)
+run.sh           one-file bash launcher (Git Bash / WSL / Linux / macOS)
 tests/           pytest suite (safety, scanner, cache, filters, reports)
 ```
 
@@ -115,6 +119,11 @@ Python 3.10 / 3.12 / 3.13 (`.github/workflows/ci.yml`).
 ## Changelog
 
 ### 2.1.0
+- **One-file launchers**: `run.bat` now bootstraps everything itself (Python
+  detection via the `py` launcher even when PATH is empty, venv creation,
+  dependency install on first run only) and runs from its own folder no
+  matter where it is launched from; `run.sh` is the bash twin; `install.bat`
+  delegates to the same bootstrap.
 - **Security fix**: `is_protected()` compared an upper-cased path against a
   lower-cased blocklist, so `Program Files`, `ProgramData`, `$Recycle.Bin`,
   `System Volume Information`… were **never actually blocked** (only
