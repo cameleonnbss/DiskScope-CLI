@@ -13,6 +13,7 @@ Guarantees:
 from __future__ import annotations
 
 import os
+import re
 import string
 from pathlib import PureWindowsPath
 
@@ -152,13 +153,17 @@ def _norm(path: str) -> str:
     return p.upper()
 
 
+_DRIVE_ROOT_RE = re.compile(r"^[A-Za-z]:[\\/]*$")
+
+
 def is_drive_root(path: str) -> bool:
+    # raw match first: "C:", "c:\", "D:/" - independent of what abspath
+    # decides to do with letters that have no current directory (varies
+    # between machines and CI runners)
+    if _DRIVE_ROOT_RE.match(str(path).strip()):
+        return True
     p = _norm(path)
     if len(p) <= 3 and p.endswith(":\\"):
-        return True
-    # bare "X:" - abspath only appends the backslash when the drive exists,
-    # so a non-existent letter would otherwise not be recognised as a root
-    if len(p) == 2 and p[1] == ":" and p[0] in string.ascii_uppercase:
         return True
     if p in ("\\\\?\\", "//", "/", "\\\\"):
         return True
