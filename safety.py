@@ -156,6 +156,10 @@ def is_drive_root(path: str) -> bool:
     p = _norm(path)
     if len(p) <= 3 and p.endswith(":\\"):
         return True
+    # bare "X:" - abspath only appends the backslash when the drive exists,
+    # so a non-existent letter would otherwise not be recognised as a root
+    if len(p) == 2 and p[1] == ":" and p[0] in string.ascii_uppercase:
+        return True
     if p in ("\\\\?\\", "//", "/", "\\\\"):
         return True
     # UNC share root \\server\share
