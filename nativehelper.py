@@ -78,3 +78,56 @@ def native_du(path: str, timeout: float = 60.0) -> Optional[tuple[int, int]]:
     if size == 0:
         return None
     return size, count
+
+
+# --------------------------------------------------------------------------- #
+#  DiskTop Core (dtk) - the optional C++ native engine.
+#
+#  Same fail-safe contract as native_du above: every helper returns None on
+#  any problem (binary missing, non-zero exit, unparseable JSON, timeout,
+#  DISKSCOPE_NO_NATIVE=1) so the pure-Python callers always fall back and the
+#  app can never be broken by the native layer.
+# --------------------------------------------------------------------------- #
+import json
+
+
+def dtk_binary_path() -> Optional[str]:
+    """Absolute path to a built `dtk` core binary, or None if unavailable."""
+    if os.environ.get("DISKSCOPE_NO_NATIVE"):
+        return None
+    for d in _candidate_dirs():
+        for name in ("dtk.exe", "dtk"):
+            p = os.path.join(d, name)
+            if os.path.isfile(p):
+                return p
+    return None
+
+
+def dtk_available() -> bool:
+    return dtk_binary_path() is not None
+
+
+def dtk_run(subcommand: str, arg: Optional[str] = None,
+           timeout: float = 30.0) -> Optional[dict]:
+    """Run `dtk <subcommand> -j [arg]` and return the parsed JSON, or None."""
+    b = dtk_binary_path()
+    if not b:
+        return None
+    cmd = [b, subcommand, "-j"]
+    if arg is not None:
+        cmd.append(arg)
+    try:
+        # The core always emits UTF-8; decode as UTF-8 (never the Windows
+        # locale codec) so accented process/service names cannot break parsing.
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout,
+                           encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if r.returncode != 0 or not r.stdout:
+        return None
+    try:
+        data = json.loads(r.stdout)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+

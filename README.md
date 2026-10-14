@@ -4,11 +4,13 @@
 path keep the old name so nothing breaks.)*
 
 [![CI](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml)
+[![Français](https://img.shields.io/badge/🇫🇷_Lire_en_Français-blue)](README_FR.md)
+[![Release](https://img.shields.io/badge/Download-DiskTop.exe-brightgreen)](https://github.com/cameleonnbss/DiskScope-CLI/releases/latest)
 
 **Windows Storage Analyzer — 100 % command line, real data only.**
-Scan your drives, find what eats your space, locate old files, detect Steam / Epic / Battle.net / EA / Ubisoft / Riot / GOG games and review a safety-gated cleanup list.
+Scan your drives, find what eats your space **and what eats your RAM**, locate old files, detect Steam / Epic / Battle.net / EA / Ubisoft / Riot / GOG games and review a safety-gated cleanup list.
 
-Everything you see is computed from your actual disk: sizes, dates, games, applications. No fake data, no simulated progress.
+Everything you see is computed from your actual disk **and live system memory**: sizes, dates, games, applications, processes. No fake data, no simulated progress.
 
 ---
 
@@ -27,6 +29,7 @@ Everything you see is computed from your actual disk: sizes, dates, games, appli
 | **7 — Advanced cleanup** | SAFE / REVIEW / DANGER recommendations + system advisories (hiberfil.sys, Windows.old, WinSxS, Delivery Optimization) with the official cleanup command |
 | **8 — Report** | Full storage report, exportable to `report.txt`, `report.json`, `report.html`, `report.csv` (Excel-friendly) |
 | **9 — Search** | `/large 10GB`, `/old 1year`, `/files .iso`, `/drive D:`, plain text search |
+| **M — RAM & Tasks** | Live memory pressure, biggest RAM consumers, logon startup items and running services (native C++ core, ctypes fallback) + a safe "trim this app's working set" action |
 | **S — Settings** | Dry-run toggle, cache clear, rescan, Store apps on/off, **language** |
 
 ## Run — one file, everything bootstraps itself
@@ -61,7 +64,7 @@ run.bat --search iso        one-shot search
 run.bat --no-cache          ignore saved cache
 run.bat --selftest          verify installation
 run.bat --empty-bin         empty the Recycle Bin (Windows API)
-run.bat --lang fr           start in French (en · fr · es · de)
+run.bat --lang fr           start in French (en · fr · es · de · it)
 ```
 
 ## Language — English by default, switch anytime
@@ -70,8 +73,8 @@ The whole interface is **English by default** and every menu, prompt, table and
 report flows through a small self-contained i18n layer (`i18n.py`). Change the
 language live with **`S` — Settings → `[L] Language`** (arrow keys or the letter);
 the choice is persisted to `%LOCALAPPDATA%\DiskScope\config.json` so it survives
-restarts. Four languages ship today: **English, French, Spanish, German** —
-adding another is just a new catalog dict with the same keys.
+restarts. Five languages ship today: **English, French, Spanish, German,
+Italian** — adding another is just a new catalog dict with the same keys.
 
 You can also set it without touching the UI:
 
@@ -94,10 +97,40 @@ pip install pyinstaller
 build_exe.bat                REM produces dist\DiskTop.exe
 ```
 
-Each tagged release (e.g. `v2.3.0`) is built and uploaded automatically by
+Each tagged release (e.g. `v2.4.0`) is built and uploaded automatically by
 `.github/workflows/release.yml`, so the executable is attached to the GitHub
-**Releases** page as a downloadable asset. The optional native C accelerator is
-bundled when it has been compiled; otherwise the pure-Python path runs.
+**Releases** page as a downloadable asset. The optional native C++ core is
+bundled when a compiler was available; otherwise the pure-Python path runs.
+
+## Native core — a real C++ engine (`native/`)
+
+Behind the "RAM & Tasks" view lives **`dtk`** — the *DiskTop Core*, a small
+cross-platform C++ toolkit (`native/*.cpp`, single binary, JSON output):
+
+```text
+dtk mem       live memory + top consumers
+dtk proc      every process with its real working-set RAM
+dtk startup   logon (autostart) registry entries
+dtk svc       Windows service inventory
+dtk disk      volumes + free space
+dtk tmp DIR   fast Unicode-safe recursive folder size (never follows a junction)
+dtk trim      release THIS process's own working set back to the OS
+```
+
+It is built on the Win32 API (`GlobalMemoryStatusEx`, Toolhelp32 snapshots,
+`GetProcessMemoryInfo`, the Service Control Manager, the `Run` registry keys) and
+on POSIX `/proc` elsewhere. **It is 100 % optional:** `run.bat` / `run.sh` /
+`build_exe.bat` compile it only if `g++` exists, `nativehelper.py` runs it behind
+a fail-safe wrapper, and `memory.py` reads the same numbers directly through
+`ctypes` when the binary is absent — so the shipped `.exe` and every machine work
+identically with or without a compiler. `DISKSCOPE_NO_NATIVE=1` disables it. The
+core is **read-only** except for `trim`, which only touches DiskTop's own memory.
+
+> **About the GitHub language bar:** DiskTop is a Python application *powered by*
+> a compiled C/C++ core. `.gitattributes` marks the interactive Python glue as
+> `linguist-detectable=false` and the vendored build outputs so the **native core
+> is the featured language**. This is purely the repository owner's display
+> preference and changes nothing about what runs or how it is tested.
 
 ## Safety model
 
@@ -133,11 +166,13 @@ games.py         Battle.net / Ubisoft / EA / Riot / GOG / Xbox
 cleanup.py       SAFE / REVIEW / DANGER engine
 reports.py       report builder + txt/json/html/csv export + offline insights
 ui.py            rich-based rendering (logo banner, panels, bars, tables)
-i18n.py          self-contained localization layer (en · fr · es · de, persisted)
+i18n.py          self-contained localization layer (en · fr · es · de · it, persisted)
 safety.py        guards, trash deletion, dry-run mode
 trash_win.py      Windows Recycle Bin (ctypes + Shell) — Unicode/accents safe
 cache.py         persistent scan cache (atomic writes)
-nativehelper.py  fail-safe bridge to the optional native accelerator
+memory.py        live RAM / process / startup view (native core + ctypes fallback)
+nativehelper.py  fail-safe bridge to the optional native core
+native/dtk.*     the C++ DiskTop Core (mem/proc/disk/startup/svc/tmp/trim CLI)
 native/dufast.c  optional C sizing helper (compiled by the launchers if gcc present)
 run.bat          one-file Windows launcher (bootstraps venv + deps + optional native)
 run.sh           one-file bash launcher (Git Bash / WSL / Linux / macOS)
@@ -152,7 +187,7 @@ tests/           pytest suite (safety, scanner, cache, filters, reports, native,
 - Windows 10 or 11 (works degraded elsewhere for development)
 - Python 3.10+ (3.14/3.15 tested)
 - `rich`, `send2trash` — auto-installed by `run.bat` / `run.sh` on first launch
-- Optional: a C compiler (`gcc`/`clang`) to build the native accelerator — not required
+- Optional: a C/C++ compiler (`gcc` for `dufast`, `g++` for the `dtk` core) — not required
 - Optional: `pyinstaller` to build the single-file `DiskTop.exe` (`build_exe.bat`)
 
 ## Tests & CI
@@ -169,6 +204,28 @@ Every push runs the suite plus `--selftest` on **Windows and Linux** across
 Python 3.10 / 3.12 / 3.13 (`.github/workflows/ci.yml`).
 
 ## Changelog
+
+### 2.4.0
+- **Native C++ core (`dtk`)**: a real cross-platform C++ engine under `native/`
+  (`dtk.h`/`dtk.cpp` + `meminfo/proclist/diskstat/svc/tmpscan/trim/version`) that
+  reads live memory, per-process working-set RAM, logon startup items, Windows
+  services, volume free space and folder sizes, and can trim its own working set.
+  Emits JSON, built on the Win32 API (with POSIX `/proc` fallbacks), compiled
+  best-effort by `run.bat`/`run.sh`/`build_exe.bat`/CI when `g++` is present, and
+  bundled into the `.exe` by `DiskTop.spec` when built. Strictly optional:
+  `nativehelper.py` is fail-safe and `memory.py` mirrors every reading in pure
+  `ctypes`, so nothing breaks without a compiler. Read-only except `trim`
+  (self-process only).
+- **New "M — RAM & Tasks" view**: memory-pressure bar, top RAM consumers, logon
+  startup items and running-service count — answering "what runs in the
+  background and eats my RAM" — with a safe working-set release.
+- **Italian (5th UI language)**: `en · fr · es · de · it`, with the RAM/tasks
+  strings translated across all locales.
+- **Featured language**: `.gitattributes` now presents the compiled C/C++ core as
+  the repository's featured language (Python glue marked `linguist-detectable=false`);
+  a display preference only — no runtime or test impact.
+- **Selftest**: added a memory-backend check; README gains a French button, a
+  download badge, and a native-core architecture section (`README_FR.md` mirror).
 
 ### 2.3.0
 - **English by default + full i18n**: the interface now opens in **English** and

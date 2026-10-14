@@ -36,7 +36,7 @@ except ImportError:  # pragma: no cover - rich is a hard dependency in practice
 
 APP_NAME = "DISKTOP"
 APP_SUB = "Windows Storage Analyzer"
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 
 # Windows consoles: force UTF-8 output and the ANSI (non-legacy) renderer
 # so unicode glyphs never crash on cp1252 code pages.
@@ -226,6 +226,7 @@ MENU_ITEMS: list[tuple[str, str, str]] = [
     ("7", "menu_clean", "menu_clean_d"),
     ("8", "menu_report", "menu_report_d"),
     ("9", "menu_search", "menu_search_d"),
+    ("M", "menu_mem", "menu_mem_d"),
     ("S", "menu_settings", "menu_settings_d"),
     ("Q", "menu_quit", ""),
 ]

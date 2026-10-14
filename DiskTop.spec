@@ -19,6 +19,14 @@ for _name in ("dufast.exe", "dufast"):
     if os.path.isfile(_p):
         _binaries.append((_p, "native"))
         break
+# DiskTop Core (dtk): the optional C++ engine. Bundled only when compiled; the
+# frozen app then gets the native RAM/Tasks/Startup path, and otherwise falls
+# back to the pure-Python (ctypes) implementation automatically.
+for _name in ("dtk.exe", "dtk"):
+    _p = os.path.join("native", _name)
+    if os.path.isfile(_p):
+        _binaries.append((_p, "native"))
+        break
 
 a = Analysis(
     ["main.py"],

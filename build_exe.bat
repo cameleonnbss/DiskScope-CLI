@@ -22,11 +22,16 @@ echo [.] Installing runtime + PyInstaller...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip >nul 2>nul
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt pyinstaller || (echo [x] pip install failed & exit /b 1)
 
-rem ---- 3) optional native accelerator (never fails the build) ---------------
+rem ---- 3) optional native core (never fails the build) ----------------------
 where gcc >nul 2>nul
 if not errorlevel 1 if not exist "native\dufast.exe" (
     echo [.] Compiling native accelerator \(dufast\)...
     gcc -O2 -o native\dufast.exe native\dufast.c >nul 2>nul
+)
+where g++ >nul 2>nul
+if not errorlevel 1 if not exist "native\dtk.exe" (
+    echo [.] Compiling DiskTop core \(dtk\)...
+    g++ -std=c++17 -O2 -static -o native\dtk.exe native\dtk.cpp native\version.cpp native\proclist.cpp native\meminfo.cpp native\trim.cpp native\diskstat.cpp native\tmpscan.cpp native\svc.cpp -lpsapi -ladvapi32 >nul 2>nul
 )
 
 rem ---- 4) freeze ------------------------------------------------------------

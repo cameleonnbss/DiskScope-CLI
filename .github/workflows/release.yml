@@ -34,6 +34,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - name: Compile native core (optional, best-effort)
+        shell: bash
+        run: |
+          # DiskTop works fully without the native core (pure-Python ctypes).
+          # These steps are best-effort: a missing compiler never fails the build.
+          DTK_SRC="native/dtk.cpp native/version.cpp native/proclist.cpp native/meminfo.cpp native/trim.cpp native/diskstat.cpp native/tmpscan.cpp native/svc.cpp"
+          if ! command -v g++ >/dev/null 2>&1; then
+            echo "g++ not available - skipping native core (app uses Python fallback)"
+            exit 0
+          fi
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            g++ -std=c++17 -O2 -static -o native/dtk.exe $DTK_SRC -lpsapi -ladvapi32 || echo "dtk build skipped"
+          else
+            g++ -std=c++17 -O2 -o native/dtk $DTK_SRC || echo "dtk build skipped"
+          fi
+          # Also build the tiny dufast accelerator when a C compiler exists.
+          command -v gcc >/dev/null 2>&1 && gcc -O2 -o native/dufast$([ "${{ runner.os }}" = "Windows" ] && echo .exe || echo "") native/dufast.c || true
+
       - name: Build single executable
         run: pyinstaller DiskTop.spec --noconfirm
 

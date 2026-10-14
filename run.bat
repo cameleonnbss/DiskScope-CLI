@@ -57,9 +57,12 @@ if errorlevel 1 (
     )
 )
 
-rem ---- 3b) optional native accelerator (best-effort; app works without it) --
+rem ---- 3b) optional native core (best-effort; app works 100% without it) ----
 where gcc >nul 2>nul
 if not errorlevel 1 if not exist "native\dufast.exe" gcc -O2 -o native\dufast.exe native\dufast.c >nul 2>nul
+rem DiskTop Core (dtk): the C++ engine behind the RAM/Tasks/Startup views.
+where g++ >nul 2>nul
+if not errorlevel 1 if not exist "native\dtk.exe" g++ -std=c++17 -O2 -static -o native\dtk.exe native\dtk.cpp native\version.cpp native\proclist.cpp native\meminfo.cpp native\trim.cpp native\diskstat.cpp native\tmpscan.cpp native\svc.cpp -lpsapi -ladvapi32 >nul 2>nul
 
 rem ---- 4) start the app --------------------------------------------------- --
 set "PYTHONIOENCODING=utf-8"

@@ -25,6 +25,7 @@ import drives as drives_mod
 import files as files_mod
 import games as games_mod
 import i18n
+import memory
 import reports
 import safety
 import scanner
@@ -820,6 +821,76 @@ def change_language() -> None:
         ui.warn(i18n.t("lang_invalid", name=name))
 
 
+def view_memory(app: App) -> None:
+    """[M] Live RAM & background view.
+
+    Shows real memory usage, the biggest memory consumers, and - when the
+    native C++ core is available - the autostart items and running services.
+    Works with or without the compiled core (pure-Python ctypes fallback).
+    Never kills a process; the only action trims DiskTop's own working set.
+    """
+    ui.show_banner()
+    ui.info(i18n.t("vw_mem_intro"))
+    try:
+        mem = memory.system_mem()
+    except Exception as e:  # noqa: BLE001 - the view must never crash the menu
+        ui.err(i18n.t("vw_error", e=e))
+        return
+    total = mem.get("total", 0)
+    used = mem.get("used", 0)
+    avail = mem.get("available", 0)
+    load = float(mem.get("load", 0.0))
+    pct = f"{load * 100:.0f}%"
+    ui.console.print()
+    ui.console.print(ui.c("  " + i18n.t("vw_mem_title"), "cyan", True))
+    # usage bar, coloured by pressure
+    bar_w = 28
+    filled = int(round(min(1.0, load) * bar_w))
+    bar = ui.c("\u2588" * filled, ui.severity_color(load)) + \
+        ui.c("\u2591" * (bar_w - filled), "grey")
+    ui.console.print(f"  [{bar}] {pct}")
+    ui.console.print("   " + i18n.t("vw_mem_load",
+                                    used=ui.human(used), total=ui.human(total), pct=pct))
+    ui.console.print("   " + i18n.t("vw_mem_avail", avail=ui.human(avail)))
+    src = i18n.t("vw_mem_src_native") if mem.get("source") == "native" \
+        else i18n.t("vw_mem_src_python")
+    ui.console.print(ui.c("   " + i18n.t("vw_mem_backend", b=src), "dim"))
+    # top consumers table
+    procs = memory.top_processes(15)
+    if procs:
+        rows = []
+        for p in procs:
+            note = f"pid {p.get('pid', 0)}  \u00b7  {i18n.t('vw_mem_col_threads')} {p.get('threads', 0)}"
+            rows.append((str(p.get("name", ""))[:38], p.get("rss", 0), note))
+        ui.size_table(rows, title=i18n.t("vw_mem_top_hdr"))
+    else:
+        ui.warn(i18n.t("vw_mem_none"))
+    # autostart + services (native core only)
+    auto = memory.autostart()
+    if auto:
+        ui.console.print(ui.c("  " + i18n.t("vw_mem_autostart_hdr"), "yellow", True))
+        for it in auto[:20]:
+            ui.console.print(f"    {it.get('name', '')[:26]:<26.26} "
+                             + ui.c(it.get("source", "")[:16], "dim") + "  "
+                             + ui.c(ui._short(it.get("command", ""), 40), "grey"))
+        if len(auto) > 20:
+            ui.console.print(ui.c(f"    ... + {len(auto) - 20}", "dim"))
+    svcs = memory.running_services()
+    if svcs:
+        ui.console.print(ui.c("  " + i18n.t("vw_mem_svc_hdr", n=len(svcs)), "magenta", True))
+    # safe action: trim this process's own working set
+    ui.console.print(ui.c("  " + i18n.t("vw_mem_help"), "dim"))
+    try:
+        ch = input(ui.c("  " + i18n.t("vw_mem_trim_q"), "cyan")).strip().upper()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if ch == "T":
+        if memory.trim_working_set():
+            ui.ok(i18n.t("vw_mem_trim_done"))
+        else:
+            ui.info(i18n.t("vw_mem_trim_no"))
+
+
 def view_settings(app: App) -> None:
     ui.show_banner()
     ui.console.print(ui.c("  " + i18n.t("st_title"), "cyan", True))
@@ -894,6 +965,8 @@ def main_menu(app: App) -> None:
             elif choice == "9":
                 view_search(app)
                 ui.press_enter()
+            elif choice == "M":
+                view_memory(app)
             elif choice in ("S", "P"):
                 view_settings(app)
             elif choice in ("Q", "X"):
@@ -981,6 +1054,9 @@ def selftest() -> int:
     import reports as _rep
     check("csv export", hasattr(_rep, "render_csv"))
     check("i18n ready", i18n.get_lang() in dict(i18n.LANGS) and bool(i18n.t("menu_scan")))
+    import memory as _mem  # noqa: F401  import check
+    check("memory backend", isinstance(_mem.native_active(), bool) and
+          _mem.system_mem().get("total", 0) >= 0)
     check("all modules import", not failures)
     if failures:
         return 1

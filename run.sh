@@ -41,11 +41,20 @@ if ! "$VPY" -c "import rich, send2trash" >/dev/null 2>&1; then
     "$VPY" -m pip install -r requirements.txt
 fi
 
-# ---- 3b) optional native accelerator (best-effort; app works without it) ---
+# ---- 3b) optional native core (best-effort; app works 100% without it) ------
 if [ ! -x "native/dufast" ]; then
     for cc in cc gcc clang; do
         if command -v "$cc" >/dev/null 2>&1; then
             "$cc" -O2 -o native/dufast native/dufast.c >/dev/null 2>&1 && break
+        fi
+    done
+fi
+# DiskTop Core (dtk): the C++ engine behind the RAM/Tasks/Startup views.
+if [ ! -x "native/dtk" ]; then
+    DTK_SRC="native/dtk.cpp native/version.cpp native/proclist.cpp native/meminfo.cpp native/trim.cpp native/diskstat.cpp native/tmpscan.cpp native/svc.cpp"
+    for cxx in g++ clang++ c++; do
+        if command -v "$cxx" >/dev/null 2>&1; then
+            "$cxx" -std=c++17 -O2 -o native/dtk $DTK_SRC >/dev/null 2>&1 && break
         fi
     done
 fi

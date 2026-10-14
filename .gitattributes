@@ -1,7 +1,32 @@
-# Shell scripts must keep LF endings or bash fails on checkout (esp. CI Linux).
+# Line-ending rules (functional, not cosmetic):
+# Shell scripts must keep LF or bash breaks on checkout (esp. CI on Linux).
 *.sh text eol=lf
 *.bat text eol=crlf
 *.py text
 *.md text
 *.png binary
 *.ico binary
+
+# Native core sources are first-class code - make them count in the bar.
+native/*.c text eol=lf
+native/*.cpp text eol=lf
+native/*.h text eol=lf
+native/*.cpp linguist-detectable=true
+native/*.h linguist-detectable=true
+native/*.c linguist-detectable=true
+
+# Compiled native artifacts are never language-statistics material.
+native/dtk linguist-vendored=true
+native/dtk.exe linguist-vendored=true
+native/dufast linguist-vendored=true
+native/dufast.exe linguist-vendored=true
+*.exe linguist-vendored=true
+*.dll linguist-vendored=true
+
+# GitHub "Languages" bar preference (repository owner's display choice):
+# the DiskTop *core* is the compiled C/C++ layer (memory/process/disk/startup/
+# services/toolkit). The Python files are the interactive front-end and glue.
+# Marking the glue as non-detectable so the native core is the featured language
+# changes ONLY the statistics display - it never affects what runs or tests.
+*.py linguist-detectable=false
+tests/* linguist-vendored=true
