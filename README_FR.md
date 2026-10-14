@@ -89,11 +89,13 @@ et `memory.py` lit les mêmes valeurs directement en `ctypes` quand le binaire e
 absent. `DISKSCOPE_NO_NATIVE=1` le désactive. Le noyau est **en lecture seule** sauf
 `trim`, qui ne touche que la propre mémoire de DiskTop.
 
-> **À propos de la barre de langues GitHub :** DiskTop est une application Python
-> *propulsée par* un noyau C/C++ compilé. Le fichier `.gitattributes` marque la
-> colle Python interactive en `linguist-detectable=false` afin que **le noyau natif
-> soit la langue mise en avant**. C'est un simple choix d'affichage du propriétaire
-> du dépôt — cela ne change ni l'exécution ni les tests.
+> **À propos de la barre de langues GitHub :** l'exécution de DiskTop est en Python
+> et il embarque un noyau C++ compilé. Le fichier `.gitattributes` marque la colle
+> Python, les sources C++ et la documentation/scripts en `linguist-detectable=false`
+> afin que le petit utilitaire **C** écrit à la main (`native/dufast.c`) soit la
+> langue mise en avant. C'est un simple choix d'affichage du propriétaire du dépôt —
+> rien n'est supprimé, le noyau C++ et tous les modules Python restent dans le dépôt,
+> et cela ne change ni l'exécution ni les tests.
 
 ## Modèle de sécurité
 

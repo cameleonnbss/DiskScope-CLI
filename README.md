@@ -126,11 +126,12 @@ a fail-safe wrapper, and `memory.py` reads the same numbers directly through
 identically with or without a compiler. `DISKSCOPE_NO_NATIVE=1` disables it. The
 core is **read-only** except for `trim`, which only touches DiskTop's own memory.
 
-> **About the GitHub language bar:** DiskTop is a Python application *powered by*
-> a compiled C/C++ core. `.gitattributes` marks the interactive Python glue as
-> `linguist-detectable=false` and the vendored build outputs so the **native core
-> is the featured language**. This is purely the repository owner's display
-> preference and changes nothing about what runs or how it is tested.
+> **About the GitHub language bar:** DiskTop's runtime is Python and it ships a
+> compiled C++ core. `.gitattributes` marks the Python glue, the C++ sources and
+> the docs/scripts as `linguist-detectable=false`, so the small hand-written **C**
+> helper (`native/dufast.c`) is the repository's featured language. This is purely
+> the owner's display preference — it deletes nothing and changes neither what runs
+> nor how it is tested; the full C++ core and every Python module stay in the repo.
 
 ## Safety model
 
@@ -221,9 +222,10 @@ Python 3.10 / 3.12 / 3.13 (`.github/workflows/ci.yml`).
   background and eats my RAM" — with a safe working-set release.
 - **Italian (5th UI language)**: `en · fr · es · de · it`, with the RAM/tasks
   strings translated across all locales.
-- **Featured language**: `.gitattributes` now presents the compiled C/C++ core as
-  the repository's featured language (Python glue marked `linguist-detectable=false`);
-  a display preference only — no runtime or test impact.
+- **Featured language**: `.gitattributes` now presents the hand-written **C** helper
+  as the repository's featured language (Python glue, the C++ sources and the
+  docs/scripts marked `linguist-detectable=false`); a display preference only — the
+  C++ core and every Python module stay in the repo, with no runtime or test impact.
 - **Selftest**: added a memory-backend check; README gains a French button, a
   download badge, and a native-core architecture section (`README_FR.md` mirror).
 
