@@ -17,6 +17,8 @@ import shutil
 import sys
 from typing import Any
 
+import i18n
+
 # GetDriveTypeW return codes
 DRIVE_TYPES = {
     0: "Unknown",
@@ -29,12 +31,18 @@ DRIVE_TYPES = {
 }
 
 _KIND_STYLE = {
-    "Fixed": "SSD/HDD (fixe)",
-    "Removable": "amovible",
-    "Network": "réseau",
-    "CD/DVD": "optique",
-    "RAM Disk": "RAM disk",
+    "Fixed": "dv_fixed",
+    "Removable": "dv_removable",
+    "Network": "dv_network",
+    "CD/DVD": "dv_optical",
+    "RAM Disk": "dv_ram",
 }
+
+
+def drive_kind(mount: str) -> str:
+    t = DRIVE_TYPES.get(_get_drive_type(mount), "Unknown")
+    key = _KIND_STYLE.get(t)
+    return i18n.t(key) if key else t
 
 
 def _is_windows() -> bool:
@@ -97,11 +105,6 @@ def logical_drives() -> list[str]:
             continue
         out.append(l)
     return out
-
-
-def drive_kind(mount: str) -> str:
-    t = DRIVE_TYPES.get(_get_drive_type(mount), "Unknown")
-    return _KIND_STYLE.get(t, t)
 
 
 def list_drives(include_unreadable: bool = False) -> list[dict[str, Any]]:

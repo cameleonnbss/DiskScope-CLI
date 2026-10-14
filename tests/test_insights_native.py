@@ -52,8 +52,9 @@ def test_insights_flags_full_drive_and_cleanable_cache():
 
 def test_render_text_and_html_include_recommendations():
     r = _report()
-    assert "RECOMMANDATIONS" in reports.render_text(r)
-    assert "Recommandations" in reports.render_html(r)
+    assert "RECOMMENDATIONS" in reports.render_text(r)       # English default
+    assert "Recommendations" in reports.render_html(r)
+
 
 
 def test_insights_escape_paths_in_html():

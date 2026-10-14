@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import time
 
+import i18n
 import reports
 import ui
+
 
 
 def _sample_report():
@@ -41,8 +43,10 @@ def test_build_report_shape():
 
 def test_render_text_contains_sections():
     txt = reports.render_text(_sample_report())
-    for needle in ("DISQUES", "TOP SPACE USERS", "GAME STORAGE", "LARGEST FILE"):
+    # default language is English
+    for needle in ("DISKS", "TOP SPACE USERS", "GAME STORAGE", "LARGEST FILE"):
         assert needle in txt
+
 
 
 def test_render_json_valid():
@@ -86,9 +90,18 @@ def test_human_sizes():
 
 
 def test_human_age():
-    assert ui.human_age(45 * 86400) == "45 j"
-    assert ui.human_age(800 * 86400) == "2 ans"
-    assert ui.human_age(100) == "1 min"
+    prev = i18n.get_lang()
+    try:
+        i18n.set_lang("en")
+        assert ui.human_age(45 * 86400) == "45 d"
+        assert ui.human_age(800 * 86400) == "2 y"
+        assert ui.human_age(100) == "1 min"
+        i18n.set_lang("fr")
+        assert ui.human_age(800 * 86400) == "2 an"
+        assert ui.human_age(45 * 86400) == "45 j"
+    finally:
+        i18n.set_lang(prev)
+
 
 
 def test_human_compact():

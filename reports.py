@@ -11,7 +11,9 @@ import os
 import time
 from typing import Any
 
+import i18n
 import ui
+
 
 
 def _label_for(name: str) -> str:
@@ -105,40 +107,42 @@ def build_insights(r: dict[str, Any]) -> list[tuple[str, str]]:
         mount = d.get("mount", "?")
         free = d.get("free", 0)
         if pct >= 0.90:
-            out.append(("danger", f"{mount} saturé à {pct * 100:.0f}% "
-                                  f"({ui.human(free)} libres) : à libérer en priorité."))
+            out.append(("danger", i18n.t("ins_full", mount=mount,
+                                         pct=f"{pct * 100:.0f}", free=ui.human(free))))
         elif pct >= 0.75:
-            out.append(("warn", f"{mount} à {pct * 100:.0f}% : {ui.human(free)} libres."))
+            out.append(("warn", i18n.t("ins_high", mount=mount,
+                                       pct=f"{pct * 100:.0f}", free=ui.human(free))))
     cl = r.get("cleanup") or {}
     if cl.get("safe_total"):
-        out.append(("good", f"~{ui.human(cl['safe_total'])} de caches/temp nettables "
-                            f"sans risque ({cl.get('safe_items', 0)} éléments, menu C/7)."))
+        out.append(("good", i18n.t("ins_cache", size=ui.human(cl["safe_total"]),
+                                   n=cl.get("safe_items", 0))))
     if cl.get("review_total"):
-        out.append(("info", f"~{ui.human(cl['review_total'])} de vieux fichiers à "
-                            f"examiner avant suppression."))
+        out.append(("info", i18n.t("ins_review", size=ui.human(cl["review_total"]))))
     for adv in (r.get("advisories") or [])[:3]:
-        out.append(("info", f"{adv.get('name', '')} : {ui.human(adv.get('size', 0) or 0)} "
-                            f"— {adv.get('advice', '')}"))
+        out.append(("info", i18n.t("ins_adv", name=adv.get('name', ''),
+                                   size=ui.human(adv.get('size', 0) or 0),
+                                   advice=adv.get('advice', ''))))
     lf = r.get("largest_file")
     if lf and (lf.get("size") or 0) >= 2 * 1024 ** 3:
-        out.append(("info", f"Plus gros fichier : {ui.human(lf['size'])} — {lf['path']}"))
+        out.append(("info", i18n.t("ins_largest", size=ui.human(lf['size']), path=lf['path'])))
     ol = r.get("oldest_large_file")
     if ol:
         age = ui.human_age(max(0, time.time() - ol.get("mtime", 0)))
-        out.append(("info", f"Gros fichier inutilisé depuis {age} : {ol['path']}"))
+        out.append(("info", i18n.t("ins_oldest", age=age, path=ol['path'])))
     gs = r.get("game_storage") or {}
     if gs:
         top = max(gs.items(), key=lambda kv: kv[1])
         if top[1] > 0:
-            out.append(("info", f"Jeux : {ui.human(r.get('game_total', 0))} au total, "
-                                f"dominé par {top[0]}."))
+            out.append(("info", i18n.t("ins_games", size=ui.human(r.get('game_total', 0)),
+                                       top=top[0])))
     tu = r.get("top_space_users") or []
     if tu and (tu[0].get("size") or 0) > 0:
-        out.append(("info", f"Premier consommateur : {tu[0]['name']} "
-                            f"({ui.human(tu[0]['size'])})."))
+        out.append(("info", i18n.t("ins_topuser", name=tu[0]['name'],
+                                   size=ui.human(tu[0]['size']))))
     if not out:
-        out.append(("good", "Aucun gros gaspillage détecté sur ce scan."))
+        out.append(("good", i18n.t("ins_clean")))
     return out
+
 
 
 _INS_MARK = {"danger": "[!]", "warn": "[~]", "good": "[+]", "info": "[-]"}
@@ -151,58 +155,59 @@ def render_text(r: dict[str, Any]) -> str:
     L: list[str] = []
     bar = "═" * 56
     L.append("╔" + bar + "╗")
-    L.append("║" + "STORAGE REPORT".center(56) + "║")
-    L.append("║" + f"généré {r['generated']}".center(56) + "║")
+    L.append("║" + i18n.t("rep_title").center(56) + "║")
+    L.append("║" + i18n.t("rep_generated", ts=r['generated']).center(56) + "║")
     L.append("╚" + bar + "╝")
     L.append("")
-    L.append("DISQUES")
+    L.append(i18n.t("rep_disks"))
     for d in r["drives"]:
         L.append(f"  {d['mount']}  [{d.get('label') or '-'}]  ({d.get('fstype')}, {d.get('kind')})")
-        L.append(f"    Total {ui.human(d['total']):>10}   "
-                 f"Utilisé {ui.human(d['used']):>10} ({d['pct'] * 100:.0f}%)   "
-                 f"Libre {ui.human(d['free']):>10}")
+        L.append(f"    {i18n.t('rep_total')} {ui.human(d['total']):>10}   "
+                 f"{i18n.t('rep_used')} {ui.human(d['used']):>10} ({d['pct'] * 100:.0f}%)   "
+                 f"{i18n.t('rep_free')} {ui.human(d['free']):>10}")
     L.append("")
-    L.append(f"TOP SPACE USERS   (dernier scan : {r['last_scan']})")
-    for i, t in enumerate(r["top_space_users"], 1):
-        L.append(f"  {i:>2}. {t['name']:<28.28} {ui.human(t['size']):>10}")
-        L.append(f"      {t['path']}")
+    L.append(i18n.t("rep_top_users") + "   " + i18n.t("rep_last_scan", ts=r['last_scan']))
+    for i, t_ in enumerate(r["top_space_users"], 1):
+        L.append(f"  {i:>2}. {t_['name']:<28.28} {ui.human(t_['size']):>10}")
+        L.append(f"      {t_['path']}")
     L.append("")
     cl = r.get("cleanup")
     if cl:
-        L.append("POTENTIAL CLEANUP")
-        L.append(f"  Safe    {ui.human(cl['safe_total']):>10}   ({cl['safe_items']} éléments)")
-        L.append(f"  Review  {ui.human(cl['review_total']):>10}   ({cl['review_items']} éléments)")
+        L.append(i18n.t("rep_potential"))
+        L.append(f"  Safe    {ui.human(cl['safe_total']):>10}   ({cl['safe_items']} {i18n.t('rep_items')})")
+        L.append(f"  Review  {ui.human(cl['review_total']):>10}   ({cl['review_items']} {i18n.t('rep_items')})")
         L.append("")
     lf = r.get("largest_file")
     if lf:
-        L.append("LARGEST FILE")
+        L.append(i18n.t("rep_largest"))
         L.append(f"  {ui.human(lf['size'])}")
         L.append(f"  {lf['path']}")
         L.append("")
     ol = r.get("oldest_large_file")
     if ol:
         age = ui.human_age(max(0, time.time() - ol.get("mtime", 0)))
-        L.append("OLDEST LARGE FILE (>100 MB)")
-        L.append(f"  {ui.human(ol['size'])}   modifié il y a {age}")
+        L.append(i18n.t("rep_oldest"))
+        L.append(f"  {ui.human(ol['size'])}   {i18n.t('rep_modified', age=age)}")
         L.append(f"  {ol['path']}")
         L.append("")
-    L.append("GAME STORAGE")
+    L.append(i18n.t("rep_game"))
     if r["game_storage"]:
         for k, v in sorted(r["game_storage"].items(), key=lambda kv: kv[1], reverse=True):
             if v > 0:
                 L.append(f"  {k:<22.22} {ui.human(v):>10}")
-        L.append(f"  {'TOTAL':<22.22} {ui.human(r['game_total']):>10}")
+        L.append(f"  {i18n.t('rep_total'):<22.22} {ui.human(r['game_total']):>10}")
     else:
-        L.append("  aucun jeu détecté")
+        L.append("  " + i18n.t("rep_no_game"))
     L.append("")
-    L.append(f"Applications détectées : {r['apps_count']}")
+    L.append(i18n.t("rep_apps", n=r['apps_count']))
     ins = r.get("insights") or build_insights(r)
     if ins:
         L.append("")
-        L.append("RECOMMANDATIONS")
+        L.append(i18n.t("rep_recommendations"))
         for lvl, txt in ins:
             L.append(f"  {_INS_MARK.get(lvl, '-')} {txt}")
     return "\n".join(L)
+
 
 
 def render_json(r: dict[str, Any]) -> str:
@@ -226,12 +231,12 @@ th{background:#1a2338;color:#7fe0ff}
 
 def render_html(r: dict[str, Any]) -> str:
     e = html.escape
+    T = i18n.t
 
     def drive_rows() -> str:
         rows = []
         for d in r["drives"]:
             pct = d["pct"] * 100
-            cls = "big" if pct >= 90 else ("warn" if pct >= 75 else "")
             rows.append(
                 f"<tr><td>{e(d['mount'])}</td><td>{ui.human(d['total'])}</td>"
                 f"<td>{ui.human(d['used'])}</td><td>{ui.human(d['free'])}</td>"
@@ -241,9 +246,9 @@ def render_html(r: dict[str, Any]) -> str:
 
     def top_rows() -> str:
         return "".join(
-            f"<tr><td>{i}</td><td>{e(t['name'])}</td><td>{ui.human(t['size'])}</td>"
-            f"<td style='color:#6b7699'>{e(t['path'])}</td></tr>"
-            for i, t in enumerate(r["top_space_users"], 1))
+            f"<tr><td>{i}</td><td>{e(it['name'])}</td><td>{ui.human(it['size'])}</td>"
+            f"<td style='color:#6b7699'>{e(it['path'])}</td></tr>"
+            for i, it in enumerate(r["top_space_users"], 1))
 
     def game_rows() -> str:
         return "".join(
@@ -254,52 +259,56 @@ def render_html(r: dict[str, Any]) -> str:
     cleanup_html = ""
     if cl:
         cleanup_html = f"""
-<h2>Potential cleanup</h2>
-<table><tr><th>Safe</th><td>{ui.human(cl['safe_total'])} ({cl['safe_items']} éléments)</td></tr>
-<tr><th>Review</th><td>{ui.human(cl['review_total'])} ({cl['review_items']} éléments)</td></tr></table>"""
+<h2>{T('rep_potential').title()}</h2>
+<table><tr><th>Safe</th><td>{ui.human(cl['safe_total'])} ({cl['safe_items']} {T('rep_items')})</td></tr>
+<tr><th>Review</th><td>{ui.human(cl['review_total'])} ({cl['review_items']} {T('rep_items')})</td></tr></table>"""
 
     def file_block(title: str, f: dict[str, Any] | None, extra: str = "") -> str:
         if not f:
             return ""
-        return (f"<h2>{title}</h2><table><tr><th>Taille</th><td>{ui.human(f['size'])}</td></tr>"
-                f"<tr><th>Chemin</th><td style='color:#6b7699'>{e(f['path'])}</td></tr>{extra}</table>")
+        return (f"<h2>{title}</h2><table><tr><th>{T('col_size')}</th><td>{ui.human(f['size'])}</td></tr>"
+                f"<tr><th>{T('th_path')}</th><td style='color:#6b7699'>{e(f['path'])}</td></tr>{extra}</table>")
 
     ol = r.get("oldest_large_file")
     ol_extra = ""
     if ol:
         age = ui.human_age(max(0, time.time() - ol.get("mtime", 0)))
-        ol_extra = f"<tr><th>Âge</th><td>modifié il y a {age}</td></tr>"
+        ol_extra = f"<tr><th>{T('th_age')}</th><td>{T('rep_modified', age=age)}</td></tr>"
 
     _ins_color = {"danger": "#ff7b7f", "warn": "#ffd479",
                   "good": "#7bffb0", "info": "#9aa7ff"}
     ins = r.get("insights") or build_insights(r)
-    insights_html = ("<h2>Recommandations</h2><ul>" + "".join(
+    insights_html = (f"<h2>{T('rep_recommendations').title()}</h2><ul>" + "".join(
         f"<li style='color:{_ins_color.get(lvl, '#d8e0f0')}'>{e(txt)}</li>"
         for lvl, txt in ins) + "</ul>") if ins else ""
 
-    return f"""<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8">
-<title>DiskTop - Storage Report</title><style>{_CSS}</style></head>
-<body>
-<h1>DiskTop — Storage Report</h1>
-<p>Généré le {e(r['generated'])} · dernier scan : {e(r['last_scan'])} ·
-durée du scan : {ui._fmt_dur(r['scan_duration'])}</p>
+    gen_line = T("html_generated", ts=e(r["generated"]), scan=e(r["last_scan"]),
+                 dur=ui._fmt_dur(r["scan_duration"]))
 
-<h2>Disques</h2>
-<table><tr><th>Volume</th><th>Total</th><th>Utilisé</th><th>Libre</th><th>Usage</th>
+    return f"""<!DOCTYPE html>
+<html lang="{i18n.get_lang()}"><head><meta charset="utf-8">
+<title>DiskTop - {T('rep_title').title()}</title><style>{_CSS}</style></head>
+<body>
+<h1>DiskTop — {T('rep_title').title()}</h1>
+<p>{gen_line}</p>
+
+
+<h2>{T('rep_disks').title()}</h2>
+<table><tr><th>{T('th_volume')}</th><th>{T('rep_total')}</th><th>{T('rep_used')}</th><th>{T('rep_free')}</th><th>{T('th_usage')}</th>
 <th>FS</th><th>Type</th></tr>{drive_rows()}</table>
 
-<h2>Top space users</h2>
-<table><tr><th>#</th><th>Catégorie</th><th>Taille</th><th>Chemin</th></tr>{top_rows()}</table>
+<h2>{T('rep_top_users').title()}</h2>
+<table><tr><th>#</th><th>{T('th_category')}</th><th>{T('col_size')}</th><th>{T('th_path')}</th></tr>{top_rows()}</table>
 {insights_html}
 {cleanup_html}
-{file_block("Largest file", r.get("largest_file"))}
-{file_block("Oldest large file", ol, ol_extra)}
-<h2>Game storage</h2>
-<table><tr><th>Launcher</th><th>Taille</th></tr>{game_rows()}
-<tr><th>TOTAL</th><th>{ui.human(r['game_total'])}</th></tr></table>
-<p>Applications détectées : {r['apps_count']}</p>
+{file_block(T('rep_largest').title(), r.get("largest_file"))}
+{file_block(T('rep_oldest').title(), ol, ol_extra)}
+<h2>{T('rep_game').title()}</h2>
+<table><tr><th>{T('th_launcher')}</th><th>{T('col_size')}</th></tr>{game_rows()}
+<tr><th>{T('rep_total')}</th><th>{ui.human(r['game_total'])}</th></tr></table>
+<p>{T('rep_apps', n=r['apps_count'])}</p>
 </body></html>"""
+
 
 
 # --------------------------------------------------------------------------- #

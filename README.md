@@ -16,18 +16,18 @@ Everything you see is computed from your actual disk: sizes, dates, games, appli
 
 | Menu | What it does |
 |---|---|
-| **1 — Analyse complète** | Parallel scan of every fixed drive: sizes, file counts, big/old file collectors, per-drive top folders, interactive folder exploration |
-| **2 — Analyse rapide** | Drive overview + first-level folder sizes of C:, **parallel** across folders (thread pool) |
+| **1 — Full analysis** | Parallel scan of every fixed drive: sizes, file counts, big/old file collectors, per-drive top folders, interactive folder exploration |
+| **2 — Quick analysis** | Drive overview + first-level folder sizes of C:, **parallel** across folders (thread pool) |
 | **3 — Applications** | Registry uninstall keys + AppData programs + Store apps, real measured sizes, honestly-flagged estimates |
-| **4 — Jeux** | Steam (`.acf` manifests), Epic (`.item`), Battle.net, Ubisoft Connect, EA App, Riot, GOG, Xbox — real local evidence only |
-| **5 — Gros fichiers** | Top files with adjustable threshold (>1 GB…>9 GB, or >100 MB) |
-| **6 — Fichiers anciens** | 30 d / 90 d / 180 d / 1 an / 2 ans buckets + category breakdown (archives, ISO, installers, videos, logs, temp, builds) |
-| **D — Doublons** | Duplicate finder over the biggest files: size + partial + full SHA-256, I/O-bounded; reports wasted space per group |
-| **C — Nettoyage express** | One-stop cleanup: caches/temp, Recycle Bin (official Windows API), big files in Downloads with multi-select (`1,3-5`) — all confirmed before deletion |
-| **7 — Nettoyage avancé** | SAFE / REVIEW / DANGER recommendations + system advisories (hiberfil.sys, Windows.old, WinSxS, Delivery Optimization) with the official cleanup command |
-| **8 — Rapport** | Full storage report, exportable to `report.txt`, `report.json`, `report.html`, `report.csv` (Excel-friendly) |
-| **9 — Recherche** | `/large 10GB`, `/old 1year`, `/files .iso`, `/drive D:`, plain text search |
-| **S — Paramètres** | Dry-run toggle, cache clear, rescan, Store apps on/off |
+| **4 — Games** | Steam (`.acf` manifests), Epic (`.item`), Battle.net, Ubisoft Connect, EA App, Riot, GOG, Xbox — real local evidence only |
+| **5 — Big files** | Top files with adjustable threshold (>1 GB…>9 GB, or >100 MB) |
+| **6 — Old files** | 30 d / 90 d / 180 d / 1 y / 2 y buckets + category breakdown (archives, ISO, installers, videos, logs, temp, builds) |
+| **D — Duplicates** | Duplicate finder over the biggest files: size + partial + full SHA-256, I/O-bounded; reports wasted space per group |
+| **C — Express cleanup** | One-stop cleanup: caches/temp, Recycle Bin (official Windows API), big files in Downloads with multi-select (`1,3-5`) — all confirmed before deletion |
+| **7 — Advanced cleanup** | SAFE / REVIEW / DANGER recommendations + system advisories (hiberfil.sys, Windows.old, WinSxS, Delivery Optimization) with the official cleanup command |
+| **8 — Report** | Full storage report, exportable to `report.txt`, `report.json`, `report.html`, `report.csv` (Excel-friendly) |
+| **9 — Search** | `/large 10GB`, `/old 1year`, `/files .iso`, `/drive D:`, plain text search |
+| **S — Settings** | Dry-run toggle, cache clear, rescan, Store apps on/off, **language** |
 
 ## Run — one file, everything bootstraps itself
 
@@ -61,7 +61,43 @@ run.bat --search iso        one-shot search
 run.bat --no-cache          ignore saved cache
 run.bat --selftest          verify installation
 run.bat --empty-bin         empty the Recycle Bin (Windows API)
+run.bat --lang fr           start in French (en · fr · es · de)
 ```
+
+## Language — English by default, switch anytime
+
+The whole interface is **English by default** and every menu, prompt, table and
+report flows through a small self-contained i18n layer (`i18n.py`). Change the
+language live with **`S` — Settings → `[L] Language`** (arrow keys or the letter);
+the choice is persisted to `%LOCALAPPDATA%\DiskScope\config.json` so it survives
+restarts. Four languages ship today: **English, French, Spanish, German** —
+adding another is just a new catalog dict with the same keys.
+
+You can also set it without touching the UI:
+
+```bat
+run.bat --lang de            one-shot flag
+set DISKTOP_LANG=es          environment override (wins over config)
+```
+
+Missing keys fall back to English, and unknown keys fall back to the key itself,
+so a partial translation can never crash the app.
+
+## Single `.exe` — no Python required
+
+`DiskTop.spec` + `build_exe.bat` / `build_exe.sh` package the app into **one
+self-contained `DiskTop.exe`** with [PyInstaller](https://pyinstaller.org) — the
+end user does not need Python installed:
+
+```bat
+pip install pyinstaller
+build_exe.bat                REM produces dist\DiskTop.exe
+```
+
+Each tagged release (e.g. `v2.3.0`) is built and uploaded automatically by
+`.github/workflows/release.yml`, so the executable is attached to the GitHub
+**Releases** page as a downloadable asset. The optional native C accelerator is
+bundled when it has been compiled; otherwise the pure-Python path runs.
 
 ## Safety model
 
@@ -97,6 +133,7 @@ games.py         Battle.net / Ubisoft / EA / Riot / GOG / Xbox
 cleanup.py       SAFE / REVIEW / DANGER engine
 reports.py       report builder + txt/json/html/csv export + offline insights
 ui.py            rich-based rendering (logo banner, panels, bars, tables)
+i18n.py          self-contained localization layer (en · fr · es · de, persisted)
 safety.py        guards, trash deletion, dry-run mode
 trash_win.py      Windows Recycle Bin (ctypes + Shell) — Unicode/accents safe
 cache.py         persistent scan cache (atomic writes)
@@ -104,7 +141,10 @@ nativehelper.py  fail-safe bridge to the optional native accelerator
 native/dufast.c  optional C sizing helper (compiled by the launchers if gcc present)
 run.bat          one-file Windows launcher (bootstraps venv + deps + optional native)
 run.sh           one-file bash launcher (Git Bash / WSL / Linux / macOS)
-tests/           pytest suite (safety, scanner, cache, filters, reports, native, launchers)
+DiskTop.spec     PyInstaller recipe for the single-file executable
+build_exe.bat     builds dist\DiskTop.exe on Windows (pip install pyinstaller)
+build_exe.sh     same build for bash/CI
+tests/           pytest suite (safety, scanner, cache, filters, reports, native, launchers, locale)
 ```
 
 ## Requirements
@@ -113,6 +153,7 @@ tests/           pytest suite (safety, scanner, cache, filters, reports, native,
 - Python 3.10+ (3.14/3.15 tested)
 - `rich`, `send2trash` — auto-installed by `run.bat` / `run.sh` on first launch
 - Optional: a C compiler (`gcc`/`clang`) to build the native accelerator — not required
+- Optional: `pyinstaller` to build the single-file `DiskTop.exe` (`build_exe.bat`)
 
 ## Tests & CI
 
@@ -128,6 +169,30 @@ Every push runs the suite plus `--selftest` on **Windows and Linux** across
 Python 3.10 / 3.12 / 3.13 (`.github/workflows/ci.yml`).
 
 ## Changelog
+
+### 2.3.0
+- **English by default + full i18n**: the interface now opens in **English** and
+  every menu, prompt, banner, table, report and safety/cleanup message is routed
+  through a self-contained localization layer (`i18n.py`). Four languages ship:
+  **English, French, Spanish, German** (314 catalog keys, placeholder-checked and
+  parity-verified across all locales). Switch live from **`S` → `[L] Language`**;
+  the choice persists to `%LOCALAPPDATA%\DiskScope\config.json`. Also settable via
+  `--lang <code>` or the `DISKTOP_LANG` env var. Unknown/partial keys fall back to
+  English, then to the key, so a translation can never crash the app.
+- **Single-file executable**: `DiskTop.spec` + `build_exe.bat` / `build_exe.sh`
+  build one self-contained `DiskTop.exe` with PyInstaller (no Python needed on the
+  target machine). `.github/workflows/release.yml` builds and attaches the `.exe`
+  to each tagged release automatically.
+- **Deep-view translation**: search, big/old files, duplicates, apps, games, drive
+  and cleanup views — plus the module data strings in `files.py` (category labels,
+  filter tokens), `safety.py` (refusal reasons + summary), `cleanup.py` (SAFE reasons,
+  advisories, Recycle Bin) and `drives.py` (drive kinds) — are all localized while the
+  functional identifiers (status tokens, category keys, drive types, hotkeys) stay stable.
+- **Fix**: the junction self-test matched the French literal `"jonction"` inside a
+  refusal message; it now asserts the guard simply *refuses* the reparse point, so it
+  stays correct in every language.
+- **Tests**: French-asserting tests made locale-deterministic (autouse English pin) and
+  a new `tests/test_locale.py` guards catalog parity → 73 passing.
 
 ### 2.2.0
 - **New logo + DiskTop identity**: the block-art startup banner and the visible

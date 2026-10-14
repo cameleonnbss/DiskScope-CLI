@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 import safety
+import i18n
 
 # --------------------------------------------------------------------------- #
 #  Old-file categories
@@ -29,17 +30,11 @@ CATEGORY_EXTS: dict[str, set[str]] = {
     "temp": {".tmp", ".temp", ".etl"},  # note: .etl in both, ok
 }
 
-CATEGORY_LABELS = {
-    "archives": "archives anciennes",
-    "iso": "images disque anciennes",
-    "installers": "anciens installateurs",
-    "videos": "anciennes vidéos",
-    "logs": "anciens logs",
-    "temp": "temporaires anciens",
-    "downloads": "anciens téléchargements",
-    "builds": "anciens builds",
-    "other": "divers",
-}
+
+def category_label(cat: str) -> str:
+    """Locale-aware display label for a category key (falls back to the key)."""
+    key = "cat_" + cat
+    return i18n.t(key) if i18n.known(key) else cat
 
 
 def classify_file(item: dict[str, Any]) -> str:
@@ -185,26 +180,27 @@ def apply_filters(items: list[dict[str, Any]], spec: dict[str, Any]) -> list[dic
 
 
 def describe_spec(spec: dict[str, Any]) -> str:
+    T = i18n.t
     parts = []
     if "min_size" in spec:
         op = ">=" if spec.get("min_size_incl") else ">"
-        parts.append(f"taille {op} {spec['min_size'] / 1024**3:.4g} GB")
+        parts.append(f"{T('fs_size')} {op} {spec['min_size'] / 1024**3:.4g} GB")
     if "max_size" in spec:
         op = "<=" if spec.get("max_size_incl") else "<"
-        parts.append(f"taille {op} {spec['max_size'] / 1024**3:.4g} GB")
+        parts.append(f"{T('fs_size')} {op} {spec['max_size'] / 1024**3:.4g} GB")
     if "min_age" in spec:
         op = ">=" if spec.get("min_age_incl") else ">"
-        parts.append(f"âge {op} {spec['min_age'] / 86400:.0f} j")
+        parts.append(f"{T('fs_age')} {op} {spec['min_age'] / 86400:.0f} {T('fs_days')}")
     if "max_age" in spec:
         op = "<=" if spec.get("max_age_incl") else "<"
-        parts.append(f"âge {op} {spec['max_age'] / 86400:.0f} j")
+        parts.append(f"{T('fs_age')} {op} {spec['max_age'] / 86400:.0f} {T('fs_days')}")
     if "ext" in spec:
-        parts.append(f"ext .{spec['ext']}")
+        parts.append(f"{T('fs_ext')} .{spec['ext']}")
     if "drive" in spec:
-        parts.append(f"disque {spec['drive']}")
+        parts.append(f"{T('fs_drive')} {spec['drive']}")
     if "type" in spec:
-        parts.append(f"type {spec['type']}")
-    return " · ".join(parts) if parts else "aucun"
+        parts.append(f"{T('fs_type')} {spec['type']}")
+    return " · ".join(parts) if parts else i18n.t("rep_none")
 
 
 def build_old_view(oldfiles: list[dict[str, Any]], min_age_days: int,

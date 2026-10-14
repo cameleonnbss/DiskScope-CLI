@@ -17,6 +17,8 @@ import re
 import string
 from pathlib import PureWindowsPath
 
+import i18n
+
 try:
     from send2trash import send2trash  # type: ignore[import-untyped]
     HAS_TRASH = True
@@ -40,16 +42,16 @@ def _trash_path(path: str) -> tuple[bool, str]:
             import trash_win
             ok, msg = trash_win.send_to_trash(path)
             if ok:
-                return True, "corbeille (shell)"
+                return True, i18n.t("sf_trash_shell")
         except Exception:  # noqa: BLE001
             pass
     if HAS_TRASH:
         try:
             send2trash(path)
-            return True, "corbeille"
+            return True, i18n.t("sf_trash")
         except Exception:  # noqa: BLE001
             pass
-    return False, "aucune corbeille disponible"
+    return False, i18n.t("sf_no_trash")
 
 # --------------------------------------------------------------------------- #
 #  Reparse points / junctions (double-counting protection)
@@ -178,7 +180,7 @@ def is_protected(path: str) -> tuple[bool, str]:
     """Return (True, reason) when path must never be deleted."""
     p = _norm(path)
     if is_drive_root(p):
-        return True, "racine de disque"
+        return True, i18n.t("sf_drvroot")
     # C:\Windows and subfolders, C:\Program Files, etc. (anchored match)
     # NB: _norm upper-cases the path, so compare against the LOWER-cased
     # first component - the old uppercase comparison never matched the
@@ -189,12 +191,12 @@ def is_protected(path: str) -> tuple[bool, str]:
             rel = p[len(prefix):]
             first = rel.split("\\", 1)[0].lower() if rel else ""
             if first in _PROTECTED_NAMES:
-                return True, f"{drive}:\\{first} (dossier système/programmes)"
+                return True, i18n.t("sf_sysprog", drive=drive, first=first)
             # one level deeper for known-sensitive subfolders
             if first == "users":
                 return False, ""
     if "\\WINDOWS\\" in p or p.endswith("\\WINDOWS"):
-        return True, "sous-dossier de Windows"
+        return True, i18n.t("sf_winchild")
     return False, ""
 
 
@@ -204,33 +206,33 @@ def is_user_critical(path: str) -> tuple[bool, str]:
     for frag in ("\\APPDATA\\ROAMING\\MICROSOFT", "\\APPDATA\\LOCAL\\MICROSOFT",
                  "\\DOCUMENTS", "\\DESKTOP", "\\PICTURES", "\\ONEDRIVE"):
         if frag in p:
-            return True, "données utilisateur potentiellement importantes"
+            return True, i18n.t("sf_userdata")
     return False, ""
 
 
 def validate_delete_path(path: str) -> tuple[bool, str]:
     """All the guards. Returns (ok, reason)."""
     if not path or not str(path).strip():
-        return False, "chemin vide"
+        return False, i18n.t("sf_empty")
     raw = str(path)
     if ".." in PureWindowsPath(raw).parts:
-        return False, "traversée de chemin (..) interdite"
+        return False, i18n.t("sf_traversal")
     if not os.path.isabs(raw):
-        return False, "le chemin doit être absolu"
+        return False, i18n.t("sf_notabs")
     if not os.path.exists(raw):
-        return False, "le chemin n'existe plus (déjà supprimé ?)"
+        return False, i18n.t("sf_gone")
     if is_drive_root(raw):
-        return False, "suppression d'une racine de disque interdite"
+        return False, i18n.t("sf_drvroot_forbid")
     if is_reparse_point(raw):
-        return False, "point de jonction / lien (pas un vrai dossier)"
+        return False, i18n.t("sf_isjunction")
     if path_crosses_reparse_point(raw):
-        return False, "chemin passant par une jonction (double comptage)"
+        return False, i18n.t("sf_junction")
     protected, why = is_protected(raw)
     if protected:
         return False, why
     # Refuse paths directly inside the app's own folder
     if _norm(raw).startswith(_norm(os.path.dirname(os.path.abspath(__file__)))):
-        return False, "fichiers de DiskTop lui-même"
+        return False, i18n.t("sf_selffiles")
     return True, ""
 
 
@@ -252,16 +254,16 @@ class Deleter:
         ok, why = validate_delete_path(path)
         if not ok:
             self.log.append((path, "REFUSED", why))
-            return False, f"Refusé : {why}"
+            return False, i18n.t("sf_refused", why=why)
         if self.dry_run:
             self.bytes_planned += size
             self.log.append((path, "DRY-RUN", reason))
-            return True, "simulé (dry run)"
+            return True, i18n.t("sf_simulated")
         ok, detail = _trash_path(path)
         if ok:
             self.bytes_freed += size
             self.log.append((path, "TRASHED", reason))
-            return True, "corbeille"
+            return True, i18n.t("sf_trash")
         # permanent delete only when the caller explicitly opted in
         if self.allow_permanent:
             try:
@@ -272,24 +274,25 @@ class Deleter:
                     os.remove(path)
                 self.bytes_freed += size
                 self.log.append((path, "DELETED", reason))
-                return True, "supprimé définitivement"
+                return True, i18n.t("sf_deleted")
             except PermissionError as e:
                 self.log.append((path, "DENIED", str(e)))
-                return False, "accès refusé (fermez l'application qui l'utilise)"
+                return False, i18n.t("sf_accessdenied")
             except OSError as e:
                 self.log.append((path, "ERROR", str(e)))
-                return False, f"erreur système : {e}"
+                return False, i18n.t("sf_syserr", e=e)
         self.log.append((path, "ERROR", detail))
-        return False, f"impossible de mettre à la corbeille : {detail}"
+        return False, i18n.t("sf_canttrash", detail=detail)
 
     def summary(self) -> str:
         done = len([x for x in self.log if x[1] in ("TRASHED", "DELETED", "DRY-RUN")])
         ref = len([x for x in self.log if x[1] == "REFUSED"])
         errc = len([x for x in self.log if x[1] in ("ERROR", "DENIED")])
         bytes_ = self.bytes_planned if self.dry_run else self.bytes_freed
-        mode = "DRY RUN (rien supprimé)" if self.dry_run else ("Corbeille" if HAS_TRASH else "Suppression directe")
-        return (f"{done} élément(s) traité(s) · {ref} refusé(s) · {errc} erreur(s) · "
-                f"libérable : {bytes_ / 1024**3:.2f} GB · mode : {mode}")
+        mode = (i18n.t("sf_mode_dry") if self.dry_run
+                else (i18n.t("sf_mode_bin") if HAS_TRASH else i18n.t("sf_mode_direct")))
+        return i18n.t("sf_summary", done=done, ref=ref, errc=errc,
+                      gb=f"{bytes_ / 1024**3:.2f}", mode=mode)
 
 
 # --------------------------------------------------------------------------- #

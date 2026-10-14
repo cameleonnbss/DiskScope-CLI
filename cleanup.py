@@ -20,6 +20,7 @@ import files as files_mod
 import scanner
 import safety
 import nativehelper
+import i18n
 import ui
 
 HOME = os.path.expanduser("~")
@@ -31,28 +32,28 @@ WIN = os.environ.get("WINDIR", r"C:\Windows")
 #  Known SAFE targets (clearly identified caches / temp locations)
 # --------------------------------------------------------------------------- #
 SAFE_TARGETS: list[tuple[str, str]] = [
-    # (path template, reason)
-    (r"%LOCALAPPDATA%\Temp", "fichiers temporaires utilisateur"),
-    (r"%WINDIR%\Temp", "fichiers temporaires Windows"),
+    # (path template, i18n reason key)
+    (r"%LOCALAPPDATA%\Temp", "cl_r_usertemp"),
+    (r"%WINDIR%\Temp", "cl_r_windtemp"),
     (r"%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*.db",
-     "cache de vignettes (thumbnails)"),
-    (r"%LOCALAPPDATA%\CrashDumps", "dumps de crash"),
-    (r"%LOCALAPPDATA%\D3DSCache", "cache DirectX (régénéré automatiquement)"),
-    (r"%LOCALAPPDATA%\NVIDIA\DXCache", "cache shaders NVIDIA"),
-    (r"%LOCALAPPDATA%\NVIDIA\GLCache", "cache shaders NVIDIA"),
-    (r"%LOCALAPPDATA%\AMD\DxCache", "cache shaders AMD"),
-    (r"%LOCALAPPDATA%\AMD\DxcCache", "cache shaders AMD"),
-    (r"%LOCALAPPDATA%\IconCache.db", "cache d'icônes"),
-    (r"%LOCALAPPDATA%\pip\cache", "cache pip"),
-    (r"%LOCALAPPDATA%\npm-cache", "cache npm"),
+     "cl_r_thumb"),
+    (r"%LOCALAPPDATA%\CrashDumps", "cl_r_crash"),
+    (r"%LOCALAPPDATA%\D3DSCache", "cl_r_dx"),
+    (r"%LOCALAPPDATA%\NVIDIA\DXCache", "cl_r_nvidia"),
+    (r"%LOCALAPPDATA%\NVIDIA\GLCache", "cl_r_nvidia"),
+    (r"%LOCALAPPDATA%\AMD\DxCache", "cl_r_amd"),
+    (r"%LOCALAPPDATA%\AMD\DxcCache", "cl_r_amd"),
+    (r"%LOCALAPPDATA%\IconCache.db", "cl_r_icon"),
+    (r"%LOCALAPPDATA%\pip\cache", "cl_r_pip"),
+    (r"%LOCALAPPDATA%\npm-cache", "cl_r_npm"),
     (r"%LOCALAPPDATA%\Google\Chrome\User Data\Default\Cache",
-     "cache navigateur Chrome"),
+     "cl_r_chrome"),
     (r"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Cache",
-     "cache navigateur Edge"),
-    (r"%APPDATA%\Mozilla\Firefox\Profiles\*\cache2", "cache navigateur Firefox"),
-    (r"%WINDIR%\Prefetch", "prefetch Windows (régénéré)"),
-    (r"%WINDIR%\SoftwareDistribution\Download", "téléchargements Windows Update"),
-    (r"%TEMP%", "fichiers temporaires (%TEMP%)"),
+     "cl_r_edge"),
+    (r"%APPDATA%\Mozilla\Firefox\Profiles\*\cache2", "cl_r_firefox"),
+    (r"%WINDIR%\Prefetch", "cl_r_prefetch"),
+    (r"%WINDIR%\SoftwareDistribution\Download", "cl_r_wu"),
+    (r"%TEMP%", "cl_r_temp"),
 ]
 
 REVIEW_MIN_AGE_DAYS = 90
@@ -87,9 +88,10 @@ def _dir_stats(path: str, stop=None) -> tuple[int, int]:
 def find_safe_items(stop=None, max_items: int = 60) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for template, reason in SAFE_TARGETS:
+    for template, reason_key in SAFE_TARGETS:
         if stop is not None and stop.is_set():
             break
+        reason = i18n.t(reason_key)
         base = _expand(template)
         if any(ch in base for ch in "*?["):
             import glob as _glob
@@ -149,8 +151,8 @@ def find_review_items(oldfiles: list[dict[str, Any]], stop=None,
             continue
         out.append({
             "path": f["path"], "size": size, "files": 1,
-            "reason": f"{files_mod.CATEGORY_LABELS.get(cat, cat)} "
-                      f"(âge : {age_days} jours)",
+            "reason": i18n.t("cl_old", cat=files_mod.category_label(cat),
+                             d=age_days),
             "level": "REVIEW", "age_days": age_days, "category": cat,
         })
         if len(out) >= limit:
@@ -162,24 +164,26 @@ def find_review_items(oldfiles: list[dict[str, Any]], stop=None,
 # --------------------------------------------------------------------------- #
 #  DANGER awareness (informational only - never actionable)
 # --------------------------------------------------------------------------- #
-DANGER_NOTES = [
-    "C:\\Windows / System32 / WinSxS : jamais proposés au nettoyage.",
-    "Program Files : suppression uniquement via le panneau Applications.",
-    "Racines de disque : suppression impossible par construction.",
-    "Dossiers Steam contenant des jeux : passe par le menu Jeux, jamais auto.",
+DANGER_NOTE_KEYS = [
+    "cl_danger1", "cl_danger2", "cl_danger3", "cl_danger4",
 ]
+
+
+def danger_notes() -> list[str]:
+    """Localized 'never deletable' transparency notes."""
+    return [i18n.t(k) for k in DANGER_NOTE_KEYS]
 
 
 def danger_summary(drives: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sizes of protected zones, shown for transparency."""
     out: list[dict[str, Any]] = []
     for d in drives[:1]:  # system drive only, bounded
-        for name, why in ((r"C:\Windows", "fichiers système Windows"),
-                          (r"C:\Program Files", "programmes installés"),
-                          (r"C:\Program Files (x86)", "programmes 32 bits")):
+        for name, why_key in ((r"C:\Windows", "cl_sysfiles"),
+                              (r"C:\Program Files", "cl_progs"),
+                              (r"C:\Program Files (x86)", "cl_progs32")):
             if os.path.isdir(name):
-                out.append({"path": name, "size": None, "reason": why,
-                            "level": "DANGER", "note": "non supprimable"})
+                out.append({"path": name, "size": None, "reason": i18n.t(why_key),
+                            "level": "DANGER", "note": i18n.t("cl_nodel")})
     return out
 
 
@@ -202,7 +206,7 @@ def recycle_bins(drives: list[dict[str, Any]], stop=None) -> list[dict[str, Any]
         size, nfiles = scanner.dir_size(rb, stop=stop)
         if size > 0:
             out.append({"path": rb, "size": size, "files": nfiles,
-                        "reason": f"corbeille de {root}", "level": "SAFE",
+                        "reason": i18n.t("cl_rb_of", root=root), "level": "SAFE",
                         "age_days": 0, "category": "recycle"})
     return out
 
@@ -213,7 +217,7 @@ def empty_recycle_bin(drive_mount: str = "") -> tuple[bool, str]:
     Returns (ok, message). The caller must confirm with the user first.
     """
     if not IS_WINDOWS:
-        return False, "windows requis"
+        return False, i18n.t("cl_winreq")
     try:
         import ctypes
         from ctypes import wintypes
@@ -226,12 +230,12 @@ def empty_recycle_bin(drive_mount: str = "") -> tuple[bool, str]:
         hr = shell32.SHEmptyRecycleBinW(ctypes.c_wchar_p(root) if root else None,
                                         flags)
         if hr == 0:
-            return True, "corbeille vidée"
+            return True, i18n.t("cl_emptied")
         if hr == -2147418113 or hr == 0x8000FFFF:  # E_UNEXPECTED = already empty
-            return True, "corbeille déjà vide"
-        return False, f"erreur Windows 0x{hr & 0xFFFFFFFF:08X}"
+            return True, i18n.t("cl_already")
+        return False, i18n.t("cl_werr", code=f"{hr & 0xFFFFFFFF:08X}")
     except Exception as e:  # noqa: BLE001
-        return False, f"erreur : {e.__class__.__name__}: {e}"
+        return False, i18n.t("cl_err", err=f"{e.__class__.__name__}: {e}")
 
 
 def find_express_items(cache: dict[str, Any], drives: list[dict[str, Any]],
@@ -284,7 +288,7 @@ def find_express_items(cache: dict[str, Any], drives: list[dict[str, Any]],
                 continue
             ok, _why = safety.validate_delete_path(c["path"])
             if ok:
-                c["reason"] = "téléchargement"
+                c["reason"] = i18n.t("cl_download")
                 c["level"] = "REVIEW"
                 c["files"] = 1
                 downloads.append(c)
@@ -318,8 +322,8 @@ def system_advisories(drives: list[dict[str, Any]], stop=None) -> list[dict[str,
         s = _sz(hf)
         if s > 1024**3:
             out.append({
-                "name": "Hibernation (hiberfil.sys)", "size": s, "path": hf,
-                "advice": f"powercfg /h off  (ou powercfg /h /type reduced pour garder la veille prolongée)",
+                "name": i18n.t("cl_hib_name"), "size": s, "path": hf,
+                "advice": i18n.t("cl_hib_adv"),
                 "how": "cmd",
             })
         break
@@ -332,10 +336,9 @@ def system_advisories(drives: list[dict[str, Any]], stop=None) -> list[dict[str,
             size, _n = scanner.dir_size(wo, stop=stop)
             if size > 0:
                 out.append({
-                    "name": "Windows.old (ancienne installation)", "size": size,
+                    "name": i18n.t("cl_wold_name"), "size": size,
                     "path": wo,
-                    "advice": "Paramètres > Système > Stockage > Temporary files > "
-                              "Supprimer les installations précédentes de Windows",
+                    "advice": i18n.t("cl_wold_adv"),
                     "how": "settings",
                 })
         break
@@ -346,10 +349,9 @@ def system_advisories(drives: list[dict[str, Any]], stop=None) -> list[dict[str,
         size, _n = scanner.dir_size(do_cache, stop=stop)
         if size > 500 * 1024**2:
             out.append({
-                "name": "Cache Delivery Optimization (Windows Update P2P)",
+                "name": i18n.t("cl_do_name"),
                 "size": size, "path": do_cache,
-                "advice": "Paramètres > Windows Update > Options avancées > "
-                          "Optimisation de la distribution",
+                "advice": i18n.t("cl_do_adv"),
                 "how": "settings",
             })
 
@@ -359,8 +361,8 @@ def system_advisories(drives: list[dict[str, Any]], stop=None) -> list[dict[str,
         size, _n = scanner.dir_size(sxs, stop=stop, max_files=60000)
         if size > 8 * 1024**3:
             out.append({
-                "name": "WinSxS (composants Windows)", "size": size, "path": sxs,
-                "advice": "Dism.exe /Online /Cleanup-Image /StartComponentCleanup",
+                "name": i18n.t("cl_sxs_name"), "size": size, "path": sxs,
+                "advice": i18n.t("cl_sxs_adv"),
                 "how": "cmd",
             })
 
@@ -369,9 +371,8 @@ def system_advisories(drives: list[dict[str, Any]], stop=None) -> list[dict[str,
     s = _sz(dump)
     if s > 256 * 1024**2:
         out.append({
-            "name": "MEMORY.DMP (dump mémoire de crash)", "size": s, "path": dump,
-            "advice": "Paramètres > Système > À propos > paramètres avancés > "
-                      "démarrage et récupération (ou supprimable via Nettoyage de disque)",
+            "name": i18n.t("cl_dump_name"), "size": s, "path": dump,
+            "advice": i18n.t("cl_dump_adv"),
             "how": "settings",
         })
     return out
@@ -389,6 +390,6 @@ def build_cleanup_report(cache: dict[str, Any], stop=None,
         "review": review,
         "safe_total": safe_total,
         "review_total": review_total,
-        "danger_notes": DANGER_NOTES,
+        "danger_notes": danger_notes(),
         "advisories": advisories,
     }

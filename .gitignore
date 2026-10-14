@@ -24,3 +24,8 @@ Desktop.ini
 # Optional native accelerator binaries (built locally by run.bat / run.sh)
 native/dufast
 native/dufast.exe
+
+# PyInstaller build output (single executable produced by build_exe.bat/.sh
+# and the Release workflow). Not committed; published via GitHub Releases.
+build/
+dist/

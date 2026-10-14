@@ -24,10 +24,12 @@ import cleanup
 import drives as drives_mod
 import files as files_mod
 import games as games_mod
+import i18n
 import reports
 import safety
 import scanner
 import ui
+
 
 APP_VERSION = ui.APP_VERSION
 
@@ -53,8 +55,10 @@ class App:
 
     # ------------------------------------------------------------------ #
     def settings_line(self) -> str:
-        mode = "DRY RUN" if self.settings["dry_run"] else "DELETE ACTIF"
-        return f"Mode: {mode}  |  Cache: {'on' if self.use_cache else 'off'}  |  [F5] Rescan"
+        mode = i18n.t("mode_dry") if self.settings["dry_run"] else i18n.t("mode_del")
+        cache = i18n.t("on") if self.use_cache else i18n.t("off")
+        return i18n.t("settings_line", mode=mode, cache=cache)
+
 
     def deleter(self) -> safety.Deleter:
         return safety.Deleter(dry_run=self.settings["dry_run"])
@@ -98,7 +102,7 @@ class App:
                         progress=cb, collectors=collectors, stop=stop)
                 except KeyboardInterrupt:
                     stop.set()
-                    ui.warn("Scan interrompu - résultats partiels conservés")
+                    ui.warn(i18n.t("vw_scan_interrupted"))
             if tree is None:
                 return
             compact = scanner.compact_tree(tree, max_depth=4, max_children=14)
@@ -133,7 +137,7 @@ class App:
                                   quick=quick)
             if self.use_cache:
                 cache_mod.save(self.cache)
-            ui.ok(f"Scan terminé : {total_files:,} fichiers en {ui._fmt_dur(duration)}")
+            ui.ok(i18n.t("vw_scan_done", n=f"{total_files:,}", dur=ui._fmt_dur(duration)))
         else:
             cache_mod.update_meta(self.cache, duration=time.monotonic() - t0,
                                   quick=True)
@@ -146,7 +150,7 @@ class App:
 
 
 def c_scan_head(mount: str) -> str:
-    return ui.c(f"  ▶ Analyse de {mount}", "cyan", True)
+    return ui.c(i18n.t("vw_scan_of", mount=mount), "cyan", True)
 
 
 # --------------------------------------------------------------------------- #
@@ -170,7 +174,7 @@ def view_drives(app: App) -> None:
     ui.show_banner()
     ds = app.ensure_drives()
     if not ds:
-        ui.err("Aucun disque détecté.")
+        ui.err(i18n.t("vw_no_disk"))
         return
     ui.show_cache_info(app.cache.get("meta"))
     deltas = _drive_deltas(app)
@@ -180,16 +184,16 @@ def view_drives(app: App) -> None:
         delta = deltas.get(d["mount"])
         if delta:
             sign = "+" if delta > 0 else ""
+            _dk = "vw_delta_more" if delta > 0 else "vw_delta_free"
             ui.console.print(ui.c(
-                f"  depuis le scan précédent : {sign}{ui.human(abs(delta))} "
-                f"{'utilisés en plus' if delta > 0 else 'libérés'}", "dim"))
+                "  " + i18n.t(_dk, v=f"{sign}{ui.human(abs(delta))}"), "dim"))
     ui.console.print()
 
 
 def view_full_analysis(app: App) -> None:
     ui.show_banner()
-    ui.info("Analyse complète - tous les disques fixes vont être scannés.")
-    if not ui.confirm("Lancer le scan complet ?", True):
+    ui.info(i18n.t("vw_full_intro"))
+    if not ui.confirm(i18n.t("vw_full_confirm"), True):
         return
     app.run_scan(quick=False)
     view_drives(app)
@@ -199,10 +203,10 @@ def view_full_analysis(app: App) -> None:
         tops = (app.cache.get("top_folders") or {}).get(d["mount"], [])
         if not tops:
             continue
-        ui.console.print(ui.c(f"  Dossiers principaux de {d['mount']} :", "yellow", True))
+        ui.console.print(ui.c("  " + i18n.t("vw_top_folders_of", mount=d["mount"]), "yellow", True))
         for i, t in enumerate(tops, 1):
             ui.console.print(f"   {i:>2}. {t['name']:<30.30} {ui.colorize(t['size'])}")
-        idx = ui.choose_index(f"Explorer un dossier de {d['mount']} (0=passer)", len(tops), allow_zero=True)
+        idx = ui.choose_index(i18n.t("vw_explore_folder", mount=d["mount"]), len(tops), allow_zero=True)
         if idx:
             explore_folder(app, tops[idx - 1]["path"])
 
@@ -210,25 +214,26 @@ def view_full_analysis(app: App) -> None:
 def explore_folder(app: App, path: str) -> None:
     """Deep-dive into one folder with a fresh bounded scan."""
     ui.console.print()
-    ui.info(f"Analyse détaillée : {path}")
-    with ui.ScanProgress(label="Analyse") as prog:
+    ui.info(i18n.t("vw_detail_analysis", path=path))
+    with ui.ScanProgress(label=i18n.t("vw_prog_analyse")) as prog:
         cb = lambda f, b, e, p: prog.tick(f, e, p)  # noqa: E731
         try:
             tree, stats = scanner.scan_tree(path, path[:2], max_depth=scanner.DETAIL_DEPTH,
                                             progress=cb)
         except KeyboardInterrupt:
-            ui.warn("Interrompu")
+            ui.warn(i18n.t("vw_interrupted"))
             return
     lines = ui.tree_lines(tree, max_depth=3, max_children=8)
     for ln in lines:
         ui.console.print("  " + ln)
-    ui.console.print(ui.c(f"  Total: {ui.human(tree['size'])}  ·  {tree['files']:,} fichiers  ·  "
-                          f"{tree['dirs']:,} sous-dossiers  ·  erreurs: {stats['errors']}", "dim"))
+    ui.console.print(ui.c(i18n.t("vw_explore_total", size=ui.human(tree['size']),
+                                files=f"{tree['files']:,}", dirs=f"{tree['dirs']:,}",
+                                errors=stats['errors']), "dim"))
     # biggest files inside this folder
     big = sorted(app.cache.get("bigfiles", []), key=lambda x: x["size"], reverse=True)
     inner = [b for b in big if b["path"].lower().startswith(path.lower())][:10]
     if inner:
-        ui.console.print(ui.c("  Plus gros fichiers ici :", "yellow", True))
+        ui.console.print(ui.c(i18n.t("vw_biggest_here"), "yellow", True))
         for b in inner:
             age = ui.human_age(max(0, time.time() - b.get("mtime", 0)))
             ui.console.print(f"    {ui.colorize(b['size']):>12}  {os.path.basename(b['path'])[:40]:<40.40} {ui.c(age, 'dim')}")
@@ -244,9 +249,9 @@ def view_quick(app: App) -> None:
     tops = (app.cache.get("top_folders") or {}).get(mount)
     if tops and app.have_full_scan():
         ui.size_table([(t["name"], t["size"], "") for t in tops[:15]],
-                      title=f"Top dossiers {mount}  (cache)")
+                      title=i18n.t("vw_top_folders_cache", mount=mount))
         return
-    ui.info(f"Analyse rapide : tailles des dossiers de premier niveau ({mount})...")
+    ui.info(i18n.t("vw_quick_intro", mount=mount))
     stop = threading.Event()
 
     def _prog(done: int, total: int, name: str, files: int) -> None:
@@ -255,34 +260,32 @@ def view_quick(app: App) -> None:
             _prog.prog.tick(done, 0, name)
     _prog.prog = None  # type: ignore[attr-defined]
 
-    with ui.ScanProgress(label=f"Top dossiers {mount}") as prog:
+    with ui.ScanProgress(label=i18n.t("vw_top_folders", mount=mount)) as prog:
         _prog.prog = prog  # type: ignore[attr-defined]
         rows = scanner.top_level_sizes(mount, stop=stop, on_progress=_prog)
-    ui.size_table([(name, size, f"{files:,} fichiers") for name, _p, size, files in rows[:15]],
-                  title=f"Top dossiers {mount}")
+    ui.size_table([(name, size, i18n.t("cache_files", n=f"{files:,}")) for name, _p, size, files in rows[:15]],
+                  title=i18n.t("vw_top_folders", mount=mount))
 
 
 def view_apps(app: App) -> None:
     ui.show_banner()
-    ui.info("Détection des applications (registre + AppData + Store)...")
+    ui.info(i18n.t("vw_apps_detecting"))
     stop = threading.Event()
-    with ui.ScanProgress(label="Applications"):
+    with ui.ScanProgress(label=i18n.t("menu_apps")):
         apps = _detect_apps_blocking(stop, app.settings["include_store_apps"])
     apps.sort(key=lambda a: a.get("size") or 0, reverse=True)
     known = [a for a in apps if a.get("size")]
     unknown = [a for a in apps if not a.get("size")]
-    ui.console.print(ui.c(f"  {len(apps)} applications détectées  ·  "
-                          f"{len(known)} avec taille réelle  ·  "
-                          f"{len(unknown)} sans taille fiable", "dim"))
+    ui.console.print(ui.c(i18n.t("vw_apps_summary", n=len(apps),
+                                 known=len(known), unknown=len(unknown)), "dim"))
     rows = []
     for a in known[:40]:
         note = f"{a.get('publisher', '')[:24]}  {a.get('last_used_label', '')}"
         rows.append((a["name"][:38], a["size"], note))
-    ui.size_table(rows, title="APPLICATIONS (tailles mesurées sur disque)")
+    ui.size_table(rows, title=i18n.t("vw_apps_title"))
     if unknown:
-        ui.console.print(ui.c(f"  ... + {len(unknown)} applications sans taille fiable (registre)", "dim"))
-    ui.console.print(ui.c("  * Dernière utilisation estimée d'après les dates de fichiers - "
-                          "Windows n'expose pas la vraie date d'usage.", "dim"))
+        ui.console.print(ui.c(i18n.t("vw_apps_unknown_more", n=len(unknown)), "dim"))
+    ui.console.print(ui.c(i18n.t("vw_apps_note"), "dim"))
     _apps_cache(app, apps)
 
 
@@ -321,13 +324,13 @@ def _apps_cache(app: App, apps: list[dict[str, Any]]) -> None:
 
 def view_games(app: App) -> None:
     ui.show_banner()
-    ui.info("Détection des jeux (Steam, Epic, Battle.net, Ubisoft, EA, Riot, GOG, Xbox)...")
+    ui.info(i18n.t("vw_games_detecting"))
     stop = threading.Event()
-    with ui.ScanProgress(label="Jeux"):
+    with ui.ScanProgress(label=i18n.t("menu_games")):
         try:
             inv = games_mod.detect_games(stop=stop)
         except Exception as e:  # never crash the menu on one launcher
-            ui.err(f"Erreur détection jeux : {e}")
+            ui.err(i18n.t("vw_games_error", e=e))
             return
     app.cache["games"] = {"launchers": {k: [{kk: g.get(kk) for kk in ("name", "path", "size", "appid", "mtime")}
                                             for g in v] for k, v in inv["launchers"].items()}}
@@ -335,12 +338,12 @@ def view_games(app: App) -> None:
         cache_mod.save(app.cache)
 
     if inv["total"] == 0:
-        ui.warn("Aucun jeu détecté sur cette machine (aucune donnée locale trouvée).")
+        ui.warn(i18n.t("vw_games_none"))
         return
     # per-launcher summary
-    rows = [(k, sum(g.get("size") or 0 for g in v), f"{len(v)} jeux")
+    rows = [(k, sum(g.get("size") or 0 for g in v), i18n.t("vw_games_count", n=len(v)))
             for k, v in inv["launchers"].items() if v]
-    ui.size_table(rows, title="STORAGE PAR LAUNCHER")
+    ui.size_table(rows, title=i18n.t("vw_storage_by_launcher"))
     # game list (rich table, sized + dated, no wrap noise)
     all_games = [(k, g) for k, v in inv["launchers"].items() for g in v]
     all_games.sort(key=lambda kg: kg[1].get("size") or 0, reverse=True)
@@ -349,18 +352,18 @@ def view_games(app: App) -> None:
              ui.human_age(max(0, time.time() - g.get("mtime", 0))) if g.get("mtime") else "-")
             for launcher, g in shown]
     ui.console.print()
-    ui.games_table(rows, title="JEUX - tailles réelles mesurées sur disque")
+    ui.games_table(rows, title=i18n.t("vw_games_title"))
     if len(all_games) > len(shown):
-        ui.console.print(ui.c(f"  ... + {len(all_games) - len(shown)} autres jeux", "dim"))
-    ui.console.print(ui.c("  Aucun jeu n'est jamais supprimé automatiquement.", "dim"))
-    idx = ui.choose_index("N° de jeu : [O] dossier  ·  [B] page boutique  ·  0=retour",
+        ui.console.print(ui.c(i18n.t("vw_games_more", n=len(all_games) - len(shown)), "dim"))
+    ui.console.print(ui.c(i18n.t("vw_games_nodel"), "dim"))
+    idx = ui.choose_index(i18n.t("vw_games_pick"),
                           len(shown), allow_zero=True)
     if not idx:
         return
     _launcher, g = shown[idx - 1]
     act = "O"
     try:
-        act = input(ui.c("  [O]uvrir le dossier / [B]outique > ", "cyan")).strip().upper() or "O"
+        act = input(ui.c(i18n.t("vw_games_action"), "cyan")).strip().upper() or "O"
     except (EOFError, KeyboardInterrupt):
         pass
     if act == "B":
@@ -369,7 +372,7 @@ def view_games(app: App) -> None:
             import steam
             steam.open_steam_store_page(appid)
         else:
-            ui.warn("Page boutique disponible pour les jeux Steam uniquement.")
+            ui.warn(i18n.t("vw_store_steam_only"))
     else:
         games_mod.open_game_folder(g)
 
@@ -379,31 +382,27 @@ def view_duplicates(app: App) -> None:
     ui.show_banner()
     big = app.cache.get("bigfiles") or []
     if len(big) < 4:
-        ui.warn("Analyse complète requise d'abord (menu 1) - le chercheur de "
-                "doublons travaille sur les plus gros fichiers recensés.")
+        ui.warn(i18n.t("vw_dup_need_scan"))
         return
-    ui.info(f"Recherche de doublons parmi les {len(big)} plus gros fichiers "
-            "(hash SHA-256 partiel puis complet)...")
+    ui.info(i18n.t("vw_dup_searching", n=len(big)))
     stop = threading.Event()
     t0 = time.monotonic()
-    with ui.ScanProgress(label="Doublons"):
+    with ui.ScanProgress(label=i18n.t("vw_prog_dupes")):
         res = files_mod.find_duplicates(big, stop=stop)
     groups = res["groups"]
     if not groups:
-        ui.ok(f"Aucun doublon détecté parmi les gros fichiers "
-              f"({time.monotonic() - t0:.1f}s).")
+        ui.ok(i18n.t("vw_dup_none", t=f"{time.monotonic() - t0:.1f}"))
         return
     ui.console.print()
-    ui.console.print(ui.c(f"  {len(groups)} groupes de doublons  ·  espace "
-                          f"récupérable : {ui.colorize(res['wasted_total'])}",
+    ui.console.print(ui.c(i18n.t("vw_dup_groups", n=len(groups),
+                                 v=ui.colorize(res['wasted_total'])),
                           "yellow", True))
     for gi, g in enumerate(groups, 1):
         ui.console.print(f"\n  [{gi}]  {ui.colorize(g['size'])}  x{len(g['paths'])}  "
-                         f"(récupérable : {ui.human(g['wasted'])})")
+                         + i18n.t("vw_dup_recoverable", v=ui.human(g['wasted'])))
         for p in g["paths"]:
             ui.console.print(ui.c(f"        {p}", "dim"))
-    ui.console.print(ui.c("\n  Aucune suppression automatique : comparez avant "
-                          "d'agir ( menu 5 ou 7 pour traiter un fichier).", "dim"))
+    ui.console.print(ui.c(i18n.t("vw_dup_note"), "dim"))
 
 
 def view_big_files(app: App) -> None:
@@ -411,20 +410,20 @@ def view_big_files(app: App) -> None:
     while True:
         big = app.cache.get("bigfiles") or []
         if not big:
-            ui.warn("Aucun scan en cache. Lancez l'analyse complète [1] d'abord.")
+            ui.warn(i18n.t("vw_no_cache_scan"))
             return
         threshold = app.settings["min_big_size"]
         selected = [b for b in big if b["size"] >= threshold][:20]
-        ui.console.print(ui.c(f"  TOP {len(selected)} GROS FICHIERS  (seuil : {ui.human(threshold)})", "cyan", True))
+        ui.console.print(ui.c(i18n.t("vw_big_top", n=len(selected), v=ui.human(threshold)), "cyan", True))
         ui.console.print()
         ui.size_table([(os.path.basename(b["path"])[:44], b["size"],
                         f"{b.get('ext', '')}  {ui._short(b['path'], 46)}")
                        for b in selected])
         total = sum(b["size"] for b in selected)
-        ui.console.print(ui.c(f"  Total affiché : {ui.human(total)}", "dim"))
-        ui.console.print(ui.c("  [1-9] seuil en Go  ·  [A] tous (>100 Mo)  ·  [E] explorer  ·  [Entrée] retour", "dim"))
+        ui.console.print(ui.c(i18n.t("vw_shown_total", v=ui.human(total)), "dim"))
+        ui.console.print(ui.c(i18n.t("vw_big_help"), "dim"))
         try:
-            ch = input(ui.c("  Choix > ", "cyan")).strip().upper()
+            ch = input(ui.c("  " + i18n.t("st_choice"), "cyan")).strip().upper()
         except (EOFError, KeyboardInterrupt):
             return
         if not ch:
@@ -434,7 +433,7 @@ def view_big_files(app: App) -> None:
         elif ch == "A":
             app.settings["min_big_size"] = 100 * 1024 * 1024
         elif ch == "E":
-            idx = ui.choose_index("Numéro du fichier à explorer", len(selected))
+            idx = ui.choose_index(i18n.t("vw_big_explore"), len(selected))
             if idx:
                 path = selected[idx - 1]["path"]
                 folder = os.path.dirname(path)
@@ -449,17 +448,18 @@ def view_old_files(app: App) -> None:
     ui.show_banner()
     old = app.cache.get("oldfiles") or []
     if not old:
-        ui.warn("Aucun scan en cache. Lancez l'analyse complète [1] d'abord.")
+        ui.warn(i18n.t("vw_no_cache_scan"))
         return
-    buckets = [("30 jours", 30), ("90 jours", 90), ("180 jours", 180),
-               ("1 an", 365), ("2 ans", 730)]
-    for i, (label, days) in enumerate(buckets, 1):
+    buckets = [("bl_30", 30), ("bl_90", 90), ("bl_180", 180),
+               ("bl_1y", 365), ("bl_2y", 730)]
+    for i, (bk, days) in enumerate(buckets, 1):
         items = files_mod.build_old_view(old, days, min_size=1 * 1024 * 1024, limit=100000)
-        ui.console.print(f"   [{i}] Non modifiés depuis {label:<9} : {len(items):>5} fichiers, "
-                         f"{ui.colorize(sum(x['size'] for x in items))}")
-    ui.console.print(ui.c("  [C] par catégorie  ·  [Entrée] retour", "dim"))
+        ui.console.print(i18n.t("vw_old_bucket", i=i, label=i18n.t(bk),
+                               n=f"{len(items):>5}",
+                               v=ui.colorize(sum(x['size'] for x in items))))
+    ui.console.print(ui.c(i18n.t("vw_old_help"), "dim"))
     try:
-        ch = input(ui.c("  Bucket > ", "cyan")).strip().upper()
+        ch = input(ui.c(i18n.t("vw_old_prompt"), "cyan")).strip().upper()
     except (EOFError, KeyboardInterrupt):
         return
     if not ch:
@@ -467,17 +467,17 @@ def view_old_files(app: App) -> None:
     if ch == "C":
         days = app.settings["old_age_days"]
         cats = files_mod.old_summary_by_category(old, days)
-        ui.console.print(ui.c(f"  Catégories (>{days} jours) :", "yellow", True))
+        ui.console.print(ui.c(i18n.t("vw_old_cats_title", days=days), "yellow", True))
         # old_summary_by_category yields (cat, count, total_size)
-        ui.size_table([(files_mod.CATEGORY_LABELS.get(cat, cat), sz, f"{n} fichiers")
-                       for cat, n, sz in cats], title="PAR CATÉGORIE")
+        ui.size_table([(files_mod.category_label(cat), sz, i18n.t("cache_files", n=n))
+                       for cat, n, sz in cats], title=i18n.t("vw_by_category"))
         ui.press_enter()
         return
     if ch.isdigit() and 1 <= int(ch) <= len(buckets):
-        label, days = buckets[int(ch) - 1]
+        bk, days = buckets[int(ch) - 1]
         app.settings["old_age_days"] = days
         items = files_mod.build_old_view(old, days, min_size=1 * 1024 * 1024)
-        ui.console.print(ui.c(f"  FICHIERS ANCIENS (> {label}, > 1 Mo)", "cyan", True))
+        ui.console.print(ui.c(i18n.t("vw_old_files_title", label=i18n.t(bk)), "cyan", True))
         ui.size_table([(os.path.basename(f["path"])[:42], f["size"],
                         f"{ui.human_age(max(0, time.time() - f.get('mtime', 0)))}  {ui._short(f['path'], 44)}")
                        for f in items[:20]])
@@ -486,9 +486,9 @@ def view_old_files(app: App) -> None:
 
 def view_cleanup(app: App) -> None:
     ui.show_banner()
-    ui.info("Recherche de nettoyage potentiel...")
+    ui.info(i18n.t("vw_cleanup_searching"))
     stop = threading.Event()
-    with ui.ScanProgress(label="Nettoyage"):
+    with ui.ScanProgress(label=i18n.t("vw_prog_cleanup")):
         rep = cleanup.build_cleanup_report(app.cache, stop=stop,
                                            drives=app.ensure_drives())
     colors = {"SAFE": "green", "REVIEW": "yellow", "DANGER": "red"}
@@ -501,30 +501,32 @@ def view_cleanup(app: App) -> None:
             continue
         total = sum(x["size"] for x in items)
         ui.console.print()
-        ui.console.print(ui.c(f"  [{level}]  {len(items)} éléments  ·  {ui.human(total)}",
+        ui.console.print(ui.c(f"  [{level}]  {len(items)} {i18n.t('rep_items')}  ·  {ui.human(total)}",
                               colors[level], True))
         for it in items[:25]:
             n = pool_map.get((level, it["path"]), "?")
-            age = f" · {it['age_days']} j" if it.get("age_days") else ""
+            day = i18n.age_units()[2]
+            age = f" · {it['age_days']} {day}" if it.get("age_days") else ""
             ui.console.print(f"   {n:>2}. {ui.colorize(it['size']):>12}  {it['path']}")
-            ui.console.print(ui.c(f"       Raison : {it['reason']}{age}", "dim"))
+            ui.console.print(ui.c("       " + i18n.t("ci_reason", r=it['reason']) + age, "dim"))
         if len(items) > 25:
             ui.console.print(ui.c(f"   ... + {len(items) - 25}", "dim"))
     ui.console.print()
     if rep.get("advisories"):
-        ui.console.print(ui.c("  [SYSTEME] Gros postes de nettoyage officiels :", "magenta", True))
+        ui.console.print(ui.c("  " + i18n.t("cv_sys"), "magenta", True))
         for adv in rep["advisories"]:
             ui.console.print(f"    • {adv['name']}  {ui.colorize(adv['size'])}")
             ui.console.print(ui.c(f"      → {adv['advice']}", "dim"))
         ui.console.print()
-    ui.console.print(ui.c("  [DANGER] Jamais proposés :", "red", True))
+    ui.console.print(ui.c("  " + i18n.t("cv_danger"), "red", True))
     for note in rep["danger_notes"]:
         ui.console.print(ui.c(f"    • {note}", "dim"))
     total_potential = rep["safe_total"] + rep["review_total"]
-    ui.console.print(ui.c(f"\n  Libérable potentiellement : {ui.human(total_potential)} "
-                          f"(dry run {'ACTIF' if app.settings['dry_run'] else 'inactif'})",
+    state = i18n.t("cv_actif") if app.settings["dry_run"] else i18n.t("cv_off")
+    ui.console.print(ui.c("\n  " + i18n.t("cv_potential", v=ui.human(total_potential), state=state),
                           "cyan", True))
     _cleanup_interactive(app, rep)
+
 
 
 def _cleanup_interactive(app: App, rep: dict[str, Any]) -> None:
@@ -532,7 +534,8 @@ def _cleanup_interactive(app: App, rep: dict[str, Any]) -> None:
     if not pool:
         return
     try:
-        raw = input(ui.c("  N° d'élément à traiter (vide = retour) > ", "cyan")).strip()
+        raw = input(ui.c("  " + i18n.t("ci_prompt") + " ", "cyan")).strip()
+
     except (EOFError, KeyboardInterrupt):
         return
     if not raw or not raw.isdigit():
@@ -544,11 +547,11 @@ def _cleanup_interactive(app: App, rep: dict[str, Any]) -> None:
     path = item["path"]
     ui.console.print()
     ui.console.print(ui.c(f"  [{level}]", "yellow", True))
-    ui.console.print(f"  Chemin : {path}")
-    ui.console.print(f"  Taille : {ui.colorize(item['size'])}")
-    ui.console.print(ui.c(f"  Raison : {item['reason']}", "dim"))
+    ui.console.print("  " + i18n.t("ci_path", p=path))
+    ui.console.print("  " + i18n.t("ci_size", s=ui.colorize(item['size'])))
+    ui.console.print(ui.c("  " + i18n.t("ci_reason", r=item['reason']), "dim"))
     try:
-        choice = input(ui.c("  [S]upprimer  [K]eep  [O]uvrir le dossier > ", "yellow")).strip().upper()
+        choice = input(ui.c("  " + i18n.t("ci_action") + " ", "yellow")).strip().upper()
     except (EOFError, KeyboardInterrupt):
         return
     if choice == "O":
@@ -556,22 +559,23 @@ def _cleanup_interactive(app: App, rep: dict[str, Any]) -> None:
             try:
                 os.startfile(path)  # type: ignore[attr-defined]
             except OSError:
-                ui.err("Impossible d'ouvrir le dossier.")
+                ui.err(i18n.t("ci_cannot_open"))
         else:
-            ui.warn("Le chemin n'existe plus.")
+            ui.warn(i18n.t("ci_missing"))
         return
     if choice != "S":
-        ui.info("Conservé.")
+        ui.info(i18n.t("ci_kept"))
         return
     ok, why = safety.validate_delete_path(path)
     if not ok:
-        ui.err(f"Suppression refusée : {why}")
+        ui.err(i18n.t("ci_refused", why=why))
         return
     deleter = app.deleter()
     if not app.settings["dry_run"]:
-        if not ui.confirm(f"Confirmer l'envoi à la CORBEILLE de :\n  {path}", False):
-            ui.info("Annulé.")
+        if not ui.confirm(i18n.t("ci_confirm", p=path), False):
+            ui.info(i18n.t("ci_cancelled"))
             return
+
     done, msg = deleter.delete(path, size=item["size"], reason=item["reason"])
     if done:
         ui.ok(f"{msg} - {ui.human(item['size'])}")
@@ -583,9 +587,10 @@ def _cleanup_interactive(app: App, rep: dict[str, Any]) -> None:
 def view_express_cleanup(app: App) -> None:
     """[C] Express cleanup: caches + Recycle Bin + Downloads junk."""
     ui.show_banner()
-    ui.info("Nettoyage express : caches, corbeille, gros téléchargements...")
+    ui.info(i18n.t("xc_start"))
     stop = threading.Event()
-    with ui.ScanProgress(label="Nettoyage express"):
+    with ui.ScanProgress(label=i18n.t("xc_prog")):
+
         bundle = cleanup.find_express_items(app.cache, app.ensure_drives(), stop=stop)
 
     caches = bundle["caches"]
@@ -597,10 +602,11 @@ def view_express_cleanup(app: App) -> None:
     tot_r = sum(i["size"] for i in recycle)
     tot_d = sum(i["size"] for i in downloads)
     ui.console.print()
-    ui.console.print(ui.c(f"  Caches/Temp     : {ui.colorize(tot_c)}", "green", True))
-    ui.console.print(ui.c(f"  Corbeille       : {ui.colorize(tot_r)}", "green", True))
-    ui.console.print(ui.c(f"  Téléchargements : {ui.colorize(tot_d)}", "yellow", True))
-    ui.console.print(ui.c(f"  TOTAL récupérable : {ui.human(tot_c + tot_r + tot_d)}\n", "bold cyan"))
+    ui.console.print(ui.c(f"  {i18n.t('xc_caches'):15}: {ui.colorize(tot_c)}", "green", True))
+    ui.console.print(ui.c(f"  {i18n.t('xc_bin'):15}: {ui.colorize(tot_r)}", "green", True))
+    ui.console.print(ui.c(f"  {i18n.t('xc_downloads'):15}: {ui.colorize(tot_d)}", "yellow", True))
+    ui.console.print(ui.c("  " + i18n.t("xc_total", v=ui.human(tot_c + tot_r + tot_d)) + "\n", "bold cyan"))
+
 
     deleter = app.deleter()
     deleted_any = False
@@ -608,12 +614,13 @@ def view_express_cleanup(app: App) -> None:
     # ---- 1) caches ------------------------------------------------------ #
     if caches:
         caches.sort(key=lambda x: x["size"], reverse=True)
-        ui.console.print(ui.c(f"  [1] CACHES & TEMP  ({len(caches)} éléments)", "green", True))
+        ui.console.print(ui.c("  " + i18n.t("xc_cache_hdr", n=len(caches)), "green", True))
         for it in caches[:12]:
             ui.console.print(f"      {ui.colorize(it['size']):>12}  {it['path']}")
         if len(caches) > 12:
-            ui.console.print(ui.c(f"      ... + {len(caches) - 12} autres", "dim"))
-        if ui.confirm("Vider tous ces caches/temp ?"):
+            ui.console.print(ui.c("      " + i18n.t("xc_more", n=len(caches) - 12), "dim"))
+        if ui.confirm(i18n.t("xc_q_caches")):
+
             for it in caches:
                 done, msg = deleter.delete(it["path"], size=it["size"], reason=it["reason"])
                 deleted_any = deleted_any or done
@@ -624,78 +631,81 @@ def view_express_cleanup(app: App) -> None:
     # ---- 2) Recycle Bin ------------------------------------------------- #
     if recycle:
         for rb in recycle:
-            ui.console.print(ui.c(f"\n  [2] CORBEILLE {rb['path']}", "green", True))
-            ui.console.print(f"      {ui.colorize(rb['size']):>12}  {rb['files']:,} éléments")
-        if ui.confirm("Vider la corbeille ? (définitif, via l'API Windows)"):
+            ui.console.print(ui.c("\n  " + i18n.t("xc_bin_hdr", path=rb['path']), "green", True))
+            ui.console.print(f"      {ui.colorize(rb['size']):>12}  " + i18n.t("xc_items", n=f"{rb['files']:,}"))
+        if ui.confirm(i18n.t("xc_q_bin")):
             for rb in recycle:
                 done, msg = cleanup.empty_recycle_bin(rb["path"][:2])
                 if done:
-                    ui.ok(f"Corbeille {rb['path'][:2]} : {msg}")
+                    ui.ok(i18n.t("xc_bin_done", drive=rb['path'][:2], msg=msg))
                 else:
-                    ui.err(f"Corbeille {rb['path'][:2]} : {msg}")
+                    ui.err(i18n.t("xc_bin_done", drive=rb['path'][:2], msg=msg))
+
 
     # ---- 3) Downloads junk ---------------------------------------------- #
     if downloads:
-        ui.console.print(ui.c(f"\n  [3] TELECHARGEMENTS  ({len(downloads)} fichiers de "
-                              f"> {ui.human(cleanup.EXPRESS_MIN_FILE_SIZE)})", "yellow", True))
+        ui.console.print(ui.c("\n  " + i18n.t("xc_dl_hdr", n=len(downloads),
+                              size=ui.human(cleanup.EXPRESS_MIN_FILE_SIZE)), "yellow", True))
+        day = i18n.age_units()[2]
         ui.size_table([(os.path.basename(d["path"])[:40], d["size"],
-                        f"{d['age_days']} j") for d in downloads[:20]],
+                        f"{d['age_days']} {day}") for d in downloads[:20]],
                       title="")
         mode = ""
         try:
-            mode = input(ui.c("  [S]élection multiple  ·  [Entrée] un par un  ·  "
-                              "[0] passer > ", "cyan")).strip().upper()
+            mode = input(ui.c("  " + i18n.t("xc_dlmode") + " ", "cyan")).strip().upper()
         except (EOFError, KeyboardInterrupt):
             pass
         if mode == "S":
             done, _bytes = _express_downloads_multi(app, downloads)
             deleted_any = deleted_any or done
         elif mode != "0":
-            idx = ui.choose_index("N° du fichier (0=fin)",
+            idx = ui.choose_index(i18n.t("xc_pickfile"),
                                   min(20, len(downloads)), allow_zero=True)
             while idx:
                 d = downloads[idx - 1]
                 if not os.path.exists(d["path"]):
-                    ui.warn("Le fichier n'existe plus.")
+                    ui.warn(i18n.t("xc_filemissing"))
                 else:
-                    done, msg = deleter.delete(d["path"], size=d["size"], reason="téléchargement")
+                    done, msg = deleter.delete(d["path"], size=d["size"], reason=i18n.t("cl_download"))
                     deleted_any = deleted_any or done
                     ui.ok(f"{os.path.basename(d['path'])} : {msg}") if done else ui.warn(msg)
-                idx = ui.choose_index("N° du fichier (0=fin)",
+                idx = ui.choose_index(i18n.t("xc_pickfile"),
                                       min(20, len(downloads)), allow_zero=True)
 
     if not (caches or recycle or downloads):
-        ui.warn("Rien à nettoyer - tout est déjà propre !")
+        ui.warn(i18n.t("xc_none"))
         return
     if not deleted_any:
-        ui.console.print(ui.c("\n  Rien n'a été supprimé (dry run "
-                              f"{'ACTIF' if app.settings['dry_run'] else 'inactif'}).", "dim"))
+        state = i18n.t("cv_actif") if app.settings["dry_run"] else i18n.t("cv_off")
+        ui.console.print(ui.c("\n  " + i18n.t("xc_dryonly", state=state), "dim"))
+
 
 
 def _express_downloads_multi(app: App, downloads: list[dict[str, Any]]) -> tuple[bool, int]:
     """Batch-trash Downloads files with one final confirmation.
     Returns (anything_done, total_bytes_selected)."""
-    idxs = ui.choose_multi("N° à mettre à la corbeille (ex : 1,3-5 ; vide=annuler)",
+    idxs = ui.choose_multi(i18n.t("dm_multi"),
                            min(20, len(downloads)))
     if not idxs:
         return False, 0
     picked = [downloads[i - 1] for i in idxs if os.path.exists(downloads[i - 1]["path"])]
     if not picked:
-        ui.warn("Aucun fichier sélectionné n'existe plus.")
+        ui.warn(i18n.t("dm_none"))
         return False, 0
     total = sum(f["size"] for f in picked)
-    ui.console.print(f"  {len(picked)} fichier(s), {ui.human(total)} :")
+    ui.console.print("  " + i18n.t("dm_count", n=len(picked), size=ui.human(total)))
     for f in picked[:10]:
         ui.console.print(ui.c(f"    · {f['path']}", "dim"))
     if len(picked) > 10:
         ui.console.print(ui.c(f"    ... + {len(picked) - 10}", "dim"))
-    if not ui.confirm(f"Envoyer ces {len(picked)} fichier(s) à la corbeille ?", False):
-        ui.info("Annulé.")
+    if not ui.confirm(i18n.t("dm_confirm", n=len(picked)), False):
+        ui.info(i18n.t("ci_cancelled"))
         return False, 0
+
     deleter = app.deleter()
     done_count = 0
     for f in picked:
-        done, msg = deleter.delete(f["path"], size=f["size"], reason="téléchargement (multi)")
+        done, msg = deleter.delete(f["path"], size=f["size"], reason=i18n.t("cl_download_multi"))
         done_count += 1 if done else 0
     ui.ok(deleter.summary())
     return done_count > 0, total
@@ -704,29 +714,29 @@ def _express_downloads_multi(app: App, downloads: list[dict[str, Any]]) -> tuple
 def view_report(app: App) -> None:
     ui.show_banner()
     if not app.have_full_scan():
-        ui.warn("Aucune analyse complète en cache - lancement rapide d'un scan...")
+        ui.warn(i18n.t("rp_nocache"))
         app.run_scan(quick=True)
-    with ui.ScanProgress(label="Rapport"):
+    with ui.ScanProgress(label=i18n.t("rp_prog")):
         ensure_inventory(app)
         cl = cleanup.build_cleanup_report(app.cache, drives=app.ensure_drives())
     rep = reports.build_report(app.cache, app.ensure_drives(), cl)
     ui.console.print(reports.render_text(rep))
     ui.console.print()
-    fmt = ui.ask("Exporter ? [txt/json/html/csv] (vide = retour)")
+    fmt = ui.ask(i18n.t("rp_export"))
     if fmt:
         try:
             path = reports.export(rep, fmt)
-            ui.ok(f"Rapport exporté : {path}")
+            ui.ok(i18n.t("rp_done", path=path))
         except OSError as e:
-            ui.err(f"Export impossible : {e}")
+            ui.err(i18n.t("rp_err", e=e))
+
 
 
 def view_search(app: App, initial: str = "") -> None:
     ui.show_banner()
-    ui.console.print(ui.c("  Commandes : /large 10GB · /old 1year · /files .iso · /games · /drive D: · "
-                          "texte = recherche", "dim"))
+    ui.console.print(ui.c(i18n.t("vw_search_help"), "dim"))
     try:
-        term = initial or input(ui.c("  Rechercher > ", "cyan")).strip()
+        term = initial or input(ui.c(i18n.t("vw_search_prompt"), "cyan")).strip()
     except (EOFError, KeyboardInterrupt):
         return
     if not term:
@@ -740,7 +750,7 @@ def view_search(app: App, initial: str = "") -> None:
         rows = [b for b in app.cache.get("bigfiles", [])
                 if b["path"].upper().startswith(drive)][:25]
         ui.size_table([(os.path.basename(b["path"])[:40], b["size"], ui._short(b["path"], 50))
-                       for b in rows], title=f"FICHIERS {drive}:")
+                       for b in rows], title=i18n.t("vw_files_of", drive=drive))
         return
     if kind in ("large", "old", "files", "filter"):
         if kind == "large":
@@ -759,61 +769,89 @@ def view_search(app: App, initial: str = "") -> None:
                 seen.add(f["path"])
                 uniq.append(f)
         res = files_mod.apply_filters(uniq, spec)[:25]
-        ui.console.print(ui.c(f"  Filtre : {files_mod.describe_spec(spec)}", "dim"))
+        ui.console.print(ui.c(i18n.t("vw_search_filter", spec=files_mod.describe_spec(spec)), "dim"))
         ui.size_table([(os.path.basename(f["path"])[:40], f["size"], ui._short(f["path"], 50))
-                       for f in res], title="RÉSULTATS")
+                       for f in res], title=i18n.t("vw_results"))
         return
     # plain search across everything cached
     res = files_mod.search_all(term, app.cache)
     counts = {k: len(v) for k, v in res.items() if v}
     if not counts:
-        ui.warn(f"Aucun résultat pour '{term}' (le cache ne couvre que le dernier scan).")
+        ui.warn(i18n.t("vw_search_nores", term=term))
         return
     if res["games"]:
-        ui.console.print(ui.c("  JEUX", "magenta", True))
+        ui.console.print(ui.c(i18n.t("vw_sect_games"), "magenta", True))
         for g in res["games"][:10]:
             ui.console.print(f"    {g['name'][:30]:<30.30}  {ui.colorize(g.get('size') or 0):>12}  "
                              f"{ui.c(g.get('launcher', ''), 'dim')}  {ui._short(g.get('path', ''), 40)}")
     if res["apps"]:
-        ui.console.print(ui.c("  APPLICATIONS", "magenta", True))
+        ui.console.print(ui.c(i18n.t("vw_sect_apps"), "magenta", True))
         for a in res["apps"][:10]:
             ui.console.print(f"    {a['name'][:30]:<30.30}  "
-                             f"{ui.colorize(a.get('size') or 0) if a.get('size') else ui.c('n/d', 'dim'):>12}")
+                             f"{ui.colorize(a.get('size') or 0) if a.get('size') else ui.c(i18n.t('na'), 'dim'):>12}")
     if res["files"]:
-        ui.console.print(ui.c("  FICHIERS", "magenta", True))
+        ui.console.print(ui.c(i18n.t("vw_sect_files"), "magenta", True))
         for f in res["files"][:15]:
             ui.console.print(f"    {ui.colorize(f['size']):>12}  {ui._short(f['path'], 56)}")
     if res["dirs"]:
-        ui.console.print(ui.c("  DOSSIERS", "magenta", True))
+        ui.console.print(ui.c(i18n.t("vw_sect_dirs"), "magenta", True))
         for d in res["dirs"][:15]:
             ui.console.print(f"    {ui.colorize(d['size']):>12}  {ui._short(d['path'], 56)}")
 
 
+def change_language() -> None:
+    """Small submenu to switch + persist the UI language."""
+    ui.console.print()
+    ui.console.print(ui.c("  " + i18n.t("lang_title"), "cyan", True))
+    codes = ", ".join(f"{code}={name}" for code, name in i18n.LANGS)
+    ui.console.print(ui.c("  " + i18n.t("lang_list", codes=codes), "dim"))
+    try:
+        raw = input(ui.c("  " + i18n.t("lang_prompt") + " ", "cyan")).strip().lower()
+
+    except (EOFError, KeyboardInterrupt):
+        return
+    if not raw:
+        return
+    code = i18n.save_lang(raw)
+    name = i18n.LANG_NAMES.get(code, code)
+    if code == i18n._normalize(raw):
+        ui.ok(i18n.t("lang_set", name=name))
+    else:
+        ui.warn(i18n.t("lang_invalid", name=name))
+
+
 def view_settings(app: App) -> None:
     ui.show_banner()
-    ui.console.print(ui.c("  PARAMÈTRES", "cyan", True))
-    ui.console.print(f"   [D] Dry run : {'ACTIF (aucune suppression réelle)' if app.settings['dry_run'] else 'INACTIF (corbeille réelle)'}")
-    ui.console.print(f"   [C] Vider le cache ({cache_mod.cache_file()})")
-    ui.console.print("   [F] Rescan complet [F5]")
-    ui.console.print("   [S] Store apps : " + ("on" if app.settings["include_store_apps"] else "off"))
-    ui.console.print("   [Entrée] retour")
+    ui.console.print(ui.c("  " + i18n.t("st_title"), "cyan", True))
+    dry = i18n.t("st_dry_on") if app.settings["dry_run"] else i18n.t("st_dry_off")
+    ui.console.print("   " + i18n.t("st_dry", state=dry))
+    ui.console.print("   " + i18n.t("st_cache", path=cache_mod.cache_file()))
+    ui.console.print("   " + i18n.t("st_rescan"))
+    store = i18n.t("on") if app.settings["include_store_apps"] else i18n.t("off")
+    ui.console.print("   " + i18n.t("st_store", state=store))
+    name = i18n.LANG_NAMES.get(i18n.get_lang(), i18n.get_lang())
+    ui.console.print("   " + i18n.t("st_lang", name=name))
+    ui.console.print(ui.c("   " + i18n.t("st_back"), "dim"))
     try:
-        ch = input(ui.c("  Choix > ", "cyan")).strip().upper()
+        ch = input(ui.c("  " + i18n.t("st_choice") + " ", "cyan")).strip().upper()
     except (EOFError, KeyboardInterrupt):
         return
     if ch == "D":
         app.settings["dry_run"] = not app.settings["dry_run"]
-        ui.ok(f"Dry run {'activé' if app.settings['dry_run'] else 'désactivé'}")
+        state = i18n.t("st_dry_enabled") if app.settings["dry_run"] else i18n.t("st_dry_disabled")
+        ui.ok(i18n.t("st_dry_toggled", state=state))
         if not app.settings["dry_run"]:
-            ui.warn("Les suppressions enverront à la CORBEILLE (send2trash), jamais en dur.")
+            ui.warn(i18n.t("st_bin_warn"))
     elif ch == "C":
         cache_mod.clear()
         app.cache = cache_mod._empty()
-        ui.ok("Cache vidé.")
+        ui.ok(i18n.t("st_cache_cleared"))
     elif ch == "F":
         app.run_scan(quick=False, force=True)
     elif ch == "S":
         app.settings["include_store_apps"] = not app.settings["include_store_apps"]
+    elif ch == "L":
+        change_language()
 
 
 # --------------------------------------------------------------------------- #
@@ -859,18 +897,19 @@ def main_menu(app: App) -> None:
             elif choice in ("S", "P"):
                 view_settings(app)
             elif choice in ("Q", "X"):
-                ui.info("À bientôt !")
+                ui.info(i18n.t("bye"))
                 return
             elif choice in ("F5", "R"):
                 app.run_scan(quick=False, force=True)
                 view_drives(app)
                 ui.press_enter()
             else:
-                ui.warn("Choix invalide.")
+                ui.warn(i18n.t("invalid_choice"))
         except KeyboardInterrupt:
-            ui.warn("Interrompu - retour au menu.")
+            ui.warn(i18n.t("interrupted_menu"))
+
         except Exception as e:  # last-resort guard: never die on one view
-            ui.err(f"Erreur : {e.__class__.__name__}: {e}")
+            ui.err(i18n.t("vw_error", e=f"{e.__class__.__name__}: {e}"))
             ui.press_enter()
 
 
@@ -888,7 +927,7 @@ def _junction_selftest(safety_mod) -> bool:
         if not safety_mod.is_reparse_point(p):
             return False
         ok, why = safety_mod.validate_delete_path(p)
-        if ok or "jonction" not in why:
+        if ok:
             return False
     return True
 
@@ -931,8 +970,9 @@ def selftest() -> int:
     import games  # noqa: F401
     import reports  # noqa: F401
     # --- new-feature checks -------------------------------------------------
-    check("french ages", ui.human_age(800 * 86400) == "2 ans"
-          and ui.human_age(45 * 86400) == "45 j")
+    check("age format", ui.human_age(800 * 86400).split()[0] == "2"
+          and ui.human_age(45 * 86400).split()[0] == "45")
+
     check("multi-select parse", _selftest_multi())
     _dup = files_mod.find_duplicates(
         [{"path": p, "size": 3, "mtime": 0} for p in []])
@@ -940,11 +980,13 @@ def selftest() -> int:
     check("history api", hasattr(cache_mod, "push_history"))
     import reports as _rep
     check("csv export", hasattr(_rep, "render_csv"))
+    check("i18n ready", i18n.get_lang() in dict(i18n.LANGS) and bool(i18n.t("menu_scan")))
     check("all modules import", not failures)
     if failures:
         return 1
-    ui.ok("DiskTop est prêt. Lancez run.bat !")
+    ui.ok(i18n.t("selftest_ready"))
     return 0
+
 
 
 def _selftest_multi() -> bool:
@@ -971,21 +1013,26 @@ def steam_parse_test() -> bool:
 def main() -> int:
     if os.name == "nt":
         os.system("")  # enable ANSI escape sequences on legacy conhost
+    i18n.load_lang()  # persisted choice (defaults to English)
     parser = argparse.ArgumentParser(prog="DiskTop",
-                                     description="Windows Storage Analyzer")
-    parser.add_argument("--scan", action="store_true", help="full scan then exit summary")
-    parser.add_argument("--quick", action="store_true", help="quick drive overview")
+                                     description=i18n.t("ap_desc"))
+    parser.add_argument("--scan", action="store_true", help=i18n.t("ap_scan"))
+    parser.add_argument("--quick", action="store_true", help=i18n.t("ap_quick"))
     parser.add_argument("--report", nargs="?", const="txt", choices=["txt", "json", "html", "csv"],
-                        help="build report and export")
-    parser.add_argument("--search", metavar="TERM", help="one-shot search")
-    parser.add_argument("--no-cache", action="store_true", help="ignore saved cache")
-    parser.add_argument("--selftest", action="store_true", help="verify installation")
-    parser.add_argument("--empty-bin", action="store_true",
-                        help="vide la corbeille (Recycle Bin) via l'API Windows")
+                        help=i18n.t("ap_report"))
+    parser.add_argument("--search", metavar="TERM", help=i18n.t("ap_search"))
+    parser.add_argument("--no-cache", action="store_true", help=i18n.t("ap_nocache"))
+    parser.add_argument("--selftest", action="store_true", help=i18n.t("ap_selftest"))
+    parser.add_argument("--empty-bin", action="store_true", help=i18n.t("ap_emptybin"))
+    parser.add_argument("--lang", metavar="CODE", choices=[c for c, _ in i18n.LANGS],
+                        help=i18n.t("ap_lang"))
     parser.add_argument("--version", action="version", version=f"DiskTop {APP_VERSION}")
     args = parser.parse_args()
+    if args.lang:
+        i18n.set_lang(args.lang)  # this run only, not persisted
 
     app = App(use_cache=not args.no_cache)
+
     try:
         if args.selftest:
             return selftest()
@@ -1003,8 +1050,9 @@ def main() -> int:
             cl = cleanup.build_cleanup_report(app.cache, drives=app.ensure_drives())
             rep = reports.build_report(app.cache, app.ensure_drives(), cl)
             path = reports.export(rep, args.report)
-            ui.ok(f"Rapport : {path}")
+            ui.ok(i18n.t("rp_saved", path=path))
             return 0
+
         if args.search:
             view_search(app, args.search)
             return 0
@@ -1019,7 +1067,7 @@ def main() -> int:
         return 0
     except KeyboardInterrupt:
         print()
-        ui.info("Interrompu.")
+        ui.info(i18n.t("vw_interrupted"))
         return 130
 
 

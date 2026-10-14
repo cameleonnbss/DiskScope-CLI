@@ -5,10 +5,20 @@ import os
 
 import pytest
 
+import i18n
 import safety
 
 IS_NT = os.name == "nt"
 windows_only = pytest.mark.skipif(not IS_NT, reason="Windows path semantics")
+
+
+@pytest.fixture(autouse=True)
+def _pin_english():
+    """safety reasons go through i18n; tests assert the English wording."""
+    prev = i18n.get_lang()
+    i18n.set_lang("en")
+    yield
+    i18n.set_lang(prev)
 
 
 # --------------------------------------------------------------------------- #
@@ -21,13 +31,13 @@ def test_empty_and_blank_rejected():
 
 def test_relative_path_rejected():
     ok, why = safety.validate_delete_path("folder\\sub")
-    assert not ok and "absolu" in why
+    assert not ok and "absolute" in why
 
 
 @windows_only
 def test_traversal_rejected():
     ok, why = safety.validate_delete_path("C:\\Users\\..\\..\\Windows")
-    assert not ok and "traversée" in why
+    assert not ok and "traversal" in why
 
 
 @windows_only
@@ -42,7 +52,7 @@ def test_drive_root_rejected():
 def test_windows_folder_protected():
     ok, why = safety.validate_delete_path("C:\\Windows\\System32\\drivers")
     assert not ok
-    assert "Windows" in why or "système" in why
+    assert "windows" in why.lower() or "system" in why.lower()
     prot, _ = safety.is_protected("C:\\Program Files\\SomeApp")
     assert prot
     # regression: uppercase path vs lowercase set used to disable the
@@ -55,7 +65,7 @@ def test_windows_folder_protected():
 def test_missing_path_rejected(tmp_path):
     ghost = tmp_path / "does_not_exist"
     ok, why = safety.validate_delete_path(str(ghost))
-    assert not ok and "n'existe plus" in why
+    assert not ok and "exist" in why
 
 
 def test_existing_tmp_file_passes_guards(tmp_path):
@@ -86,7 +96,7 @@ def test_junction_refused(tmp_path):
     try:
         assert safety.is_reparse_point(str(link))
         ok, why = safety.validate_delete_path(str(link))
-        assert not ok and "jonction" in why
+        assert not ok and "junction" in why
     finally:
         os.rmdir(link)
 
@@ -99,7 +109,7 @@ def test_deleter_dry_run_touches_nothing(tmp_path):
     f.write_text("data")
     d = safety.Deleter(dry_run=True)
     ok, msg = d.delete(str(f), size=4, reason="test")
-    assert ok and "simulé" in msg
+    assert ok and "simulated" in msg
     assert f.exists()
     assert d.bytes_planned == 4 and d.bytes_freed == 0
 
@@ -107,7 +117,7 @@ def test_deleter_dry_run_touches_nothing(tmp_path):
 def test_deleter_refused_path_not_trashed(tmp_path):
     d = safety.Deleter(dry_run=False)
     ok, msg = d.delete("relative\\path")
-    assert not ok and msg.startswith("Refusé")
+    assert not ok and msg.startswith("Refused")
     assert d.log[-1][1] == "REFUSED"
 
 
@@ -118,7 +128,7 @@ def test_deleter_real_trash(tmp_path):
     d = safety.Deleter(dry_run=False)
     ok, msg = d.delete(str(f), size=3, reason="test")
     # in CI the recycle bin may be unavailable; that must be a clean failure
-    assert ok or "corbeille" in msg
+    assert ok or "Recycle Bin" in msg
     if ok:
         assert not f.exists()
         assert d.bytes_freed == 3

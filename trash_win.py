@@ -52,11 +52,11 @@ def send_to_trash(path: str) -> tuple[bool, str]:
     gone afterwards — that is the only signal that matters.
     """
     if not _HAS_SHELL:
-        return False, "shell Windows indisponible"
+        return False, "Windows shell unavailable"
     if not path:
-        return False, "chemin vide"
+        return False, "empty path"
     if not os.path.lexists(path):
-        return False, "chemin inexistant"
+        return False, "path does not exist"
 
     # Double-null terminated wide string as required by pFrom.
     buf = ctypes.create_unicode_buffer(str(path) + "\0")
@@ -72,11 +72,11 @@ def send_to_trash(path: str) -> tuple[bool, str]:
     try:
         shell32.SHFileOperationW(ctypes.byref(struc))
     except Exception as e:  # noqa: BLE001
-        return False, f"erreur shell : {e}"
+        return False, f"shell error: {e}"
 
     if not os.path.lexists(path):
-        return True, "corbeille"
-    return False, "échec (fichier toujours présent)"
+        return True, "recycled"
+    return False, "failed (file still present)"
 
 
 def empty_recycle_bin(drive: str = "") -> tuple[bool, str]:
@@ -85,7 +85,7 @@ def empty_recycle_bin(drive: str = "") -> tuple[bool, str]:
     Returns ``(ok, message)``. The caller must confirm with the user first.
     """
     if not _HAS_SHELL:
-        return False, "shell Windows indisponible"
+        return False, "Windows shell unavailable"
     shell32.SHEmptyRecycleBinW.restype = ctypes.HRESULT
     shell32.SHEmptyRecycleBinW.argtypes = [wintypes.HWND, wintypes.LPCWSTR, wintypes.DWORD]
     flags = 0x1 | 0x2 | 0x4  # NOCONFIRMATION | NOPROGRESSUI | NOSOUND
@@ -93,12 +93,12 @@ def empty_recycle_bin(drive: str = "") -> tuple[bool, str]:
     try:
         hr = shell32.SHEmptyRecycleBinW(0, root, flags)
     except Exception as e:  # noqa: BLE001
-        return False, f"erreur : {e}"
+        return False, f"error: {e}"
     if hr == 0:
-        return True, "corbeille vidée"
+        return True, "Recycle Bin emptied"
     if hr in (-2147418113, 0x8000FFFF, 1):  # E_UNEXPECTED / already empty
-        return True, "corbeille déjà vide"
-    return False, f"erreur Windows 0x{hr & 0xFFFFFFFF:08X}"
+        return True, "Recycle Bin already empty"
+    return False, f"Windows error 0x{hr & 0xFFFFFFFF:08X}"
 
 
 if __name__ == "__main__":

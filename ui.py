@@ -11,6 +11,8 @@ import sys
 import time
 from typing import Any, Callable, Iterable, Sequence
 
+import i18n
+
 try:
     from rich.align import Align
     from rich.box import HEAVY, DOUBLE
@@ -34,7 +36,7 @@ except ImportError:  # pragma: no cover - rich is a hard dependency in practice
 
 APP_NAME = "DISKTOP"
 APP_SUB = "Windows Storage Analyzer"
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 
 # Windows consoles: force UTF-8 output and the ANSI (non-legacy) renderer
 # so unicode glyphs never crash on cp1252 code pages.
@@ -98,19 +100,18 @@ def human_compact(n: int | float) -> str:
 
 
 def human_age(seconds: int | float) -> str:
+    umin, uh, ud, umo, uy = i18n.age_units()
     s = int(max(0, seconds))
     if s < 3600:
-        return f"{max(1, s // 60)} min"
+        return f"{max(1, s // 60)} {umin}"
     if s < 86400:
-        h = s // 3600
-        return f"{h} h"
+        return f"{s // 3600} {uh}"
     days = s // 86400
     if days < 60:
-        return f"{days} j"
+        return f"{days} {ud}"
     if days < 365:
-        return f"{max(1, days // 30)} mois"
-    years = days // 365
-    return f"{years} an{'s' if years > 1 else ''}"
+        return f"{max(1, days // 30)} {umo}"
+    return f"{days // 365} {uy}"
 
 
 # --------------------------------------------------------------------------- #
@@ -172,17 +173,19 @@ BANNER = r"""
 
 def show_banner() -> None:
     console.clear()
+    sub = i18n.t("app_sub")
     if RICH:
         t = Text(BANNER, style="bold cyan")
         t.append(f"  v{APP_VERSION}", style="dim")
         console.print(Align.center(t))
-        console.print(Align.center(Text(APP_SUB, style="bold magenta")))
+        console.print(Align.center(Text(sub, style="bold magenta")))
         console.print(Rule(style="cyan"))
     else:
         print(c("=" * 62, "cyan", True))
         print(c(BANNER, "cyan", True))
-        print(c(APP_SUB.center(62), "magenta", True))
+        print(c(sub.center(62), "magenta", True))
         print(c("=" * 62, "cyan", True))
+
 
 
 def show_cache_info(meta: dict[str, Any] | None) -> None:
@@ -191,12 +194,13 @@ def show_cache_info(meta: dict[str, Any] | None) -> None:
     ts = time.strftime("%H:%M", time.localtime(meta.get("finished", 0)))
     dur = meta.get("duration", 0)
     files = meta.get("files")
-    line = f"Dernier scan : {ts}  ·  durée : {_fmt_dur(dur)}"
+    line = (i18n.t("cache_last", ts=ts) + "  ·  "
+            + i18n.t("cache_dur", dur=_fmt_dur(dur)))
     if files and dur:
         rate = files / dur
-        line += f"  ·  {rate / 1000:.0f}k fichiers/s"
+        line += "  ·  " + i18n.t("cache_rate", r=f"{rate / 1000:.0f}")
     if files:
-        line += f"  ·  {files:,} fichiers".replace(",", " ")
+        line += "  ·  " + i18n.t("cache_files", n=f"{files:,}".replace(",", " "))
     console.print(c("  " + line, "grey"))
 
 
@@ -210,21 +214,28 @@ def _fmt_dur(seconds: float) -> str:
 # --------------------------------------------------------------------------- #
 #  Menus
 # --------------------------------------------------------------------------- #
-MENU_ITEMS: list[tuple[str, str]] = [
-    ("1", "Analyse complète", "scan de tous les disques"),
-    ("2", "Analyse rapide", "aperçu des disques"),
-    ("3", "Applications", "logiciels installés"),
-    ("4", "Jeux", "Steam, Epic, Battle.net..."),
-    ("5", "Gros fichiers", "top fichiers volumineux"),
-    ("6", "Fichiers anciens", "jamais modifiés depuis..."),
-    ("D", "Doublons", "gros fichiers en double (hash)"),
-    ("C", "Nettoyage express", "Téléchargements + corbeille + caches"),
-    ("7", "Nettoyage avancé", "recommandations SAFE/REVIEW"),
-    ("8", "Rapport", "résumé + export"),
-    ("9", "Recherche", "/search <motif>"),
-    ("S", "Paramètres", "dry run, cache, filtres"),
-    ("Q", "Quitter", ""),
+MENU_ITEMS: list[tuple[str, str, str]] = [
+    ("1", "menu_scan", "menu_scan_d"),
+    ("2", "menu_quick", "menu_quick_d"),
+    ("3", "menu_apps", "menu_apps_d"),
+    ("4", "menu_games", "menu_games_d"),
+    ("5", "menu_big", "menu_big_d"),
+    ("6", "menu_old", "menu_old_d"),
+    ("D", "menu_dup", "menu_dup_d"),
+    ("C", "menu_express", "menu_express_d"),
+    ("7", "menu_clean", "menu_clean_d"),
+    ("8", "menu_report", "menu_report_d"),
+    ("9", "menu_search", "menu_search_d"),
+    ("S", "menu_settings", "menu_settings_d"),
+    ("Q", "menu_quit", ""),
 ]
+
+
+def menu_rows() -> list[tuple[str, str, str]]:
+    """Resolve the menu in the active language (label/description translated)."""
+    return [(key, i18n.t(label_key),
+             i18n.t(desc_key) if desc_key else "")
+            for key, label_key, desc_key in MENU_ITEMS]
 
 
 def _menu_table() -> "Table":
@@ -238,9 +249,10 @@ def _menu_table() -> "Table":
 def show_menu(settings_line: str = "") -> str:
     """Print the main menu, return the user's choice key (upper-cased)."""
     console.print()
+    rows = menu_rows()
     if RICH:
         t = _menu_table()
-        for key, label, desc in MENU_ITEMS:
+        for key, label, desc in rows:
             k = Text(f"[{key}]", style="bold yellow")
             if key == "C":
                 label = Text(label, style="bold green")
@@ -253,14 +265,15 @@ def show_menu(settings_line: str = "") -> str:
                             width=78, padding=(0, 2)))
     else:
         print(c(f"  {APP_NAME.center(60)}", "cyan", True))
-        for key, label, desc in MENU_ITEMS:
+        for key, label, desc in rows:
             print(f"  [{c(key, 'yellow', True)}] {label:<20} {c(desc, 'dim') if desc else ''}")
     if settings_line:
         console.print(c("  " + settings_line, "dim"))
     try:
-        return input(c("\n  Sélection > ", "cyan", True)).strip().upper()
+        return input(c("\n  " + i18n.t("sel_prompt") + " ", "cyan", True)).strip().upper()
     except (EOFError, KeyboardInterrupt):
         return "Q"
+
 
 
 def confirm(question: str, default: bool = False) -> bool:
@@ -274,9 +287,9 @@ def confirm(question: str, default: bool = False) -> bool:
     return ans in ("y", "yes", "o", "oui")
 
 
-def press_enter(msg: str = "Entrée pour continuer") -> None:
+def press_enter(msg: str | None = None) -> None:
     try:
-        input(c(f"\n  ({msg})...", "dim"))
+        input(c(f"\n  ({msg if msg is not None else i18n.t('press_enter')})...", "dim"))
     except (EOFError, KeyboardInterrupt):
         pass
 
@@ -284,7 +297,8 @@ def press_enter(msg: str = "Entrée pour continuer") -> None:
 def pause_or_continue(title: str, count: int) -> None:
     """When a long listing was cut short, tell the user why."""
     if count > 0:
-        console.print(c(f"  ... {count} ligne(s) tronquée(s)", "dim"))
+        console.print(c("  " + i18n.t("lines_truncated", n=count), "dim"))
+
 
 
 # --------------------------------------------------------------------------- #
@@ -445,12 +459,12 @@ def games_table(rows: Sequence[tuple[str, Any, str, str]], title: str = "") -> N
         t = Table(title=title, title_style="bold cyan", box=SIMPLE,
                   header_style="bold", padding=(0, 1), expand=False)
         t.add_column("#", justify="right", width=3)
-        t.add_column("Jeu", max_width=40, overflow="ellipsis")
-        t.add_column("Taille", justify="right", width=10)
+        t.add_column(i18n.t("col_game"), max_width=40, overflow="ellipsis")
+        t.add_column(i18n.t("col_size"), justify="right", width=10)
         t.add_column("Launcher", width=16, overflow="ellipsis")
-        t.add_column("Dernier usage*", width=14)
+        t.add_column(i18n.t("col_lastused"), width=14)
         for i, (name, sz, launcher, age) in enumerate(rows, 1):
-            size_cell = Text("n/d", style="dim") if not sz else Text(human(sz),
+            size_cell = Text(i18n.t("na"), style="dim") if not sz else Text(human(sz),
                             style="red bold" if sz >= 50 * 1024**3 else
                             ("yellow" if sz >= 5 * 1024**3 else "cyan"))
             t.add_row(str(i), str(name)[:40], size_cell, launcher, age)
@@ -459,7 +473,7 @@ def games_table(rows: Sequence[tuple[str, Any, str, str]], title: str = "") -> N
         if title:
             print(c(f"  {title}", "cyan", True))
         for i, (name, sz, launcher, age) in enumerate(rows, 1):
-            s = human(sz) if sz else "n/d"
+            s = human(sz) if sz else i18n.t("na")
             print(f"  {i:>3}. {str(name)[:40]:<40.40} {s:>10}  {launcher:<16} {age}")
 
 
@@ -530,9 +544,10 @@ def choose_index(title: str, count: int, allow_zero: bool = False) -> int | None
     """Ask the user to pick 1..count. Returns None on cancel/invalid."""
     lo = 0 if allow_zero else 1
     try:
-        raw = input(c(f"  {title} [{lo}-{count}] (vide = annuler) > ", "cyan")).strip()
+        raw = input(c("  " + i18n.t("choose_index", title=title, lo=lo, count=count) + " ", "cyan")).strip()
     except (EOFError, KeyboardInterrupt):
         return None
+
     if not raw:
         return None
     try:

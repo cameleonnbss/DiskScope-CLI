@@ -14,21 +14,35 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from typing import Optional
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _NATIVE_DIR = os.path.join(_HERE, "native")
 
 
+def _candidate_dirs() -> list[str]:
+    """Where a dufast binary may live: source tree, PyInstaller bundle, or
+    alongside a frozen executable. Non-existent dirs are filtered by caller."""
+    dirs = [_NATIVE_DIR]
+    if getattr(sys, "frozen", False):  # running inside a PyInstaller bundle
+        base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+        dirs.append(os.path.join(base, "native"))
+        dirs.append(os.path.join(os.path.dirname(sys.executable), "native"))
+    return dirs
+
+
 def binary_path() -> Optional[str]:
     """Absolute path to a built dufast binary, or None."""
     if os.environ.get("DISKSCOPE_NO_NATIVE"):
         return None
-    for name in ("dufast.exe", "dufast"):
-        p = os.path.join(_NATIVE_DIR, name)
-        if os.path.isfile(p):
-            return p
+    for d in _candidate_dirs():
+        for name in ("dufast.exe", "dufast"):
+            p = os.path.join(d, name)
+            if os.path.isfile(p):
+                return p
     return None
+
 
 
 def available() -> bool:
