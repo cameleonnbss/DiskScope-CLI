@@ -210,7 +210,9 @@ def empty_recycle_bin(drive_mount: str = "") -> tuple[bool, str]:
         import ctypes
         from ctypes import wintypes
         shell32 = ctypes.windll.shell32  # type: ignore[attr-defined]
-        shell32.SHEmptyRecycleBinW.restype = ctypes.HRESULT
+        # ctypes.HRESULT only exists on Python 3.12+; fall back to the
+        # signed 32-bit int it wraps so 3.10/3.11 keep working.
+        shell32.SHEmptyRecycleBinW.restype = getattr(ctypes, "HRESULT", ctypes.c_long)
         flags = 0x1 | 0x2 | 0x4  # SHERB_NOCONFIRMATION | NOPROGRESSUI | NOSOUND
         root = (drive_mount or "").rstrip("\\") or None
         hr = shell32.SHEmptyRecycleBinW(ctypes.c_wchar_p(root) if root else None,

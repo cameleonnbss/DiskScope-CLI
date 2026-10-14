@@ -41,19 +41,14 @@ CATEGORY_LABELS = {
     "other": "divers",
 }
 
-_INSTALLER_DIRS = ("downloads", "desktop", "documents")
-
 
 def classify_file(item: dict[str, Any]) -> str:
     """Assign an old-file category from extension + location heuristics."""
     ext = (item.get("ext") or os.path.splitext(item.get("path", ""))[1]).lower()
-    path = (item.get("path") or "").lower().replace("/", "\\")
     for cat, exts in CATEGORY_EXTS.items():
         if ext in exts:
             return cat
-    if ext == ".exe":
-        if any(f"\\{d}\\" in path for d in _INSTALLER_DIRS) or path.endswith(".exe"):
-            return "installers"
+    path = (item.get("path") or "").lower().replace("/", "\\")
     if "\\downloads\\" in path:
         return "downloads"
     if re.search(r"\\(build|dist|target|bin|obj|out)\\", path):
@@ -124,11 +119,12 @@ def parse_filter_expr(expr: str) -> dict[str, Any]:
                 spec["min_" + key] = val
             elif op == ">=":
                 spec["min_" + key] = val
-                spec.setdefault("_ge", set()).add(key)
+                spec["min_" + key + "_incl"] = True
             elif op == "<":
                 spec["max_" + key] = val
             elif op == "<=":
                 spec["max_" + key] = val
+                spec["max_" + key + "_incl"] = True
             continue
         m = re.match(r"^ext=(\S+)$", tok, re.I)
         if m:
@@ -149,16 +145,32 @@ def spec_matches(item: dict[str, Any], spec: dict[str, Any]) -> bool:
     size = item.get("size", 0)
     mtime = item.get("mtime", 0)
     age = (time.time() - mtime) if mtime else 0
-    if "min_size" in spec and size <= spec["min_size"]:
-        return False
-    if "max_size" in spec and size >= spec["max_size"]:
-        return False
-    if "min_age" in spec and age < spec["min_age"]:
-        return False
-    if "max_age" in spec and age > spec["max_age"]:
-        return False
+    if "min_size" in spec:
+        if spec.get("min_size_incl"):
+            if size < spec["min_size"]:
+                return False
+        elif size <= spec["min_size"]:
+            return False
+    if "max_size" in spec:
+        if spec.get("max_size_incl"):
+            if size > spec["max_size"]:
+                return False
+        elif size >= spec["max_size"]:
+            return False
+    if "min_age" in spec:
+        if spec.get("min_age_incl"):
+            if age < spec["min_age"]:
+                return False
+        elif age <= spec["min_age"]:
+            return False
+    if "max_age" in spec:
+        if spec.get("max_age_incl"):
+            if age > spec["max_age"]:
+                return False
+        elif age >= spec["max_age"]:
+            return False
     if "ext" in spec and (item.get("ext") or "").lower().lstrip(".") != spec["ext"]:
-        return strict_ext_ok(item, spec["ext"])
+        return False
     if "drive" in spec:
         p = (item.get("path") or "")
         if not p.upper().startswith(spec["drive"]):
@@ -168,11 +180,6 @@ def spec_matches(item: dict[str, Any], spec: dict[str, Any]) -> bool:
     return True
 
 
-def strict_ext_ok(item: dict[str, Any], want: str) -> bool:
-    # extension comparison is exact; helper kept for clarity
-    return (item.get("ext") or "").lower().lstrip(".") == want
-
-
 def apply_filters(items: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
     return [x for x in items if spec_matches(x, spec)]
 
@@ -180,13 +187,17 @@ def apply_filters(items: list[dict[str, Any]], spec: dict[str, Any]) -> list[dic
 def describe_spec(spec: dict[str, Any]) -> str:
     parts = []
     if "min_size" in spec:
-        parts.append(f"taille > {spec['min_size'] / 1024**3:.4g} GB".replace(".0000", ""))
+        op = ">=" if spec.get("min_size_incl") else ">"
+        parts.append(f"taille {op} {spec['min_size'] / 1024**3:.4g} GB")
     if "max_size" in spec:
-        parts.append(f"taille < {spec['max_size'] / 1024**3:.4g} GB".replace(".0000", ""))
+        op = "<=" if spec.get("max_size_incl") else "<"
+        parts.append(f"taille {op} {spec['max_size'] / 1024**3:.4g} GB")
     if "min_age" in spec:
-        parts.append(f"âge > {spec['min_age'] / 86400:.0f} j")
+        op = ">=" if spec.get("min_age_incl") else ">"
+        parts.append(f"âge {op} {spec['min_age'] / 86400:.0f} j")
     if "max_age" in spec:
-        parts.append(f"âge < {spec['max_age'] / 86400:.0f} j")
+        op = "<=" if spec.get("max_age_incl") else "<"
+        parts.append(f"âge {op} {spec['max_age'] / 86400:.0f} j")
     if "ext" in spec:
         parts.append(f"ext .{spec['ext']}")
     if "drive" in spec:
@@ -197,9 +208,16 @@ def describe_spec(spec: dict[str, Any]) -> str:
 
 
 def build_old_view(oldfiles: list[dict[str, Any]], min_age_days: int,
-                   limit: int = 25) -> list[dict[str, Any]]:
+                   limit: int = 25, min_size: int = 0) -> list[dict[str, Any]]:
+    """Old files (mtime older than `min_age_days`), biggest first.
+
+    `min_size` (bytes) drops negligible entries — callers use it to keep
+    the listing focused on files worth deleting.
+    """
     cutoff = time.time() - min_age_days * 86400
-    sel = [f for f in oldfiles if f.get("mtime", 0) and f["mtime"] <= cutoff]
+    sel = [f for f in oldfiles
+           if f.get("mtime", 0) and f["mtime"] <= cutoff
+           and (f.get("size") or 0) >= min_size]
     sel.sort(key=lambda x: x["size"], reverse=True)
     return sel[:limit]
 
@@ -315,7 +333,7 @@ def find_duplicates(bigfiles: list[dict[str, Any]], stop=None,
             return ""
 
     for size in sorted(by_size, reverse=True):
-        if stop is not None and stop.is_set() or len(groups) >= max_groups:
+        if (stop is not None and stop.is_set()) or len(groups) >= max_groups:
             break
         cands = [f for f in by_size[size] if os.path.exists(f["path"])]
         if len(cands) < 2:
@@ -336,7 +354,7 @@ def find_duplicates(bigfiles: list[dict[str, Any]], stop=None,
                 continue
             final: dict[str, list[str]] = collections.defaultdict(list)
             for p in paths:
-                if stop is not None and stop.is_set() or hashed >= max_hash_bytes_total:
+                if (stop is not None and stop.is_set()) or hashed >= max_hash_bytes_total:
                     break
                 fsig = stream_hash(p, full=True)
                 hashed += size

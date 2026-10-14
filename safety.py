@@ -171,15 +171,18 @@ def is_protected(path: str) -> tuple[bool, str]:
     if is_drive_root(p):
         return True, "racine de disque"
     # C:\Windows and subfolders, C:\Program Files, etc. (anchored match)
+    # NB: _norm upper-cases the path, so compare against the LOWER-cased
+    # first component - the old uppercase comparison never matched the
+    # lowercase set, leaving Program Files / ProgramData unprotected.
     for drive in string.ascii_uppercase:
         prefix = f"{drive}:\\"
         if p.startswith(prefix):
             rel = p[len(prefix):]
-            first = rel.split("\\", 1)[0] if rel else ""
+            first = rel.split("\\", 1)[0].lower() if rel else ""
             if first in _PROTECTED_NAMES:
                 return True, f"{drive}:\\{first} (dossier système/programmes)"
             # one level deeper for known-sensitive subfolders
-            if first == "USERS":
+            if first == "users":
                 return False, ""
     if "\\WINDOWS\\" in p or p.endswith("\\WINDOWS"):
         return True, "sous-dossier de Windows"

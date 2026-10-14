@@ -468,8 +468,9 @@ def view_old_files(app: App) -> None:
         days = app.settings["old_age_days"]
         cats = files_mod.old_summary_by_category(old, days)
         ui.console.print(ui.c(f"  Catégories (>{days} jours) :", "yellow", True))
-        ui.size_table([(files_mod.CATEGORY_LABELS.get(c, c), total, f"{n} fichiers")
-                       for c, (total, n) in cats], title="PAR CATÉGORIE")
+        # old_summary_by_category yields (cat, count, total_size)
+        ui.size_table([(files_mod.CATEGORY_LABELS.get(cat, cat), sz, f"{n} fichiers")
+                       for cat, n, sz in cats], title="PAR CATÉGORIE")
         ui.press_enter()
         return
     if ch.isdigit() and 1 <= int(ch) <= len(buckets):

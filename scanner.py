@@ -50,20 +50,34 @@ class Collectors:
         self._old: list[dict[str, Any]] = []
         self.lock = threading.Lock()
 
-    def add_file(self, path: str, size: int, mtime: float, ext: str,
-                 drive: str) -> None:
+    def add_files(self, batch: list[tuple[str, int, float, str]],
+                  drive: str) -> None:
+        """Add many (path, size, mtime, ext) files under one lock.
+
+        Batching per directory keeps the number of lock acquisitions at
+        one-per-directory instead of one-per-file, which is what makes
+        the parallel walk scale on NVMe.
+        """
+        if not batch:
+            return
         with self.lock:
-            self._big.append({"path": path, "size": size, "mtime": mtime,
-                              "ext": (ext or "").lower(), "drive": drive})
+            recs = [{"path": p, "size": s, "mtime": m,
+                     "ext": (x or "").lower(), "drive": drive}
+                    for p, s, m, x in batch]
+            self._big.extend(recs)
             if len(self._big) > self.big_keep * 2:
                 self._big = heapq.nlargest(self.big_keep, self._big,
                                            key=lambda x: x["size"])
-            if size >= self.old_min_size:
-                self._old.append({"path": path, "size": size, "mtime": mtime,
-                                  "ext": (ext or "").lower(), "drive": drive})
+            old_recs = [r for r in recs if r["size"] >= self.old_min_size]
+            if old_recs:
+                self._old.extend(old_recs)
                 if len(self._old) > self.old_max:
                     self._old.sort(key=lambda x: x["size"], reverse=True)
                     del self._old[self.old_max:]
+
+    def add_file(self, path: str, size: int, mtime: float, ext: str,
+                 drive: str) -> None:
+        self.add_files([(path, size, mtime, ext)], drive)
 
     def results(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         with self.lock:
@@ -106,6 +120,14 @@ def _worker(ctx: _Ctx, pool: ThreadPoolExecutor, node: dict[str, Any],
                 ctx.errors += 1
             entries = []
         to_submit: list[dict[str, Any]] = []
+        # Accumulate per-file stats locally and flush with ONE lock
+        # acquisition per directory - the per-file locks were the main
+        # contention point on large trees.
+        batch: list[tuple[str, int, float, str]] = []
+        local_bytes = 0
+        local_files = 0
+        local_errors = 0
+        local_mtime = node["mtime"]
         for e in entries:
             if ctx.stop.is_set():
                 break
@@ -122,14 +144,11 @@ def _worker(ctx: _Ctx, pool: ThreadPoolExecutor, node: dict[str, Any],
                     size = st.st_size
                     mtime = st.st_mtime
                     ext = os.path.splitext(name)[1]
-                    with ctx.lock:
-                        ctx.files += 1
-                        ctx.bytes += size
-                        node["size"] += size
-                        node["files"] += 1
-                        if mtime > node["mtime"]:
-                            node["mtime"] = mtime
-                    ctx.collectors.add_file(e.path, size, mtime, ext, ctx.drive)
+                    local_files += 1
+                    local_bytes += size
+                    if mtime > local_mtime:
+                        local_mtime = mtime
+                    batch.append((e.path, size, mtime, ext))
                 elif e.is_dir(follow_symlinks=False):
                     if safety.should_skip_dir(name):
                         continue
@@ -137,8 +156,16 @@ def _worker(ctx: _Ctx, pool: ThreadPoolExecutor, node: dict[str, Any],
                         continue
                     to_submit.append(_new_node(name, e.path))
             except OSError:
-                with ctx.lock:
-                    ctx.errors += 1
+                local_errors += 1
+        with ctx.lock:
+            ctx.files += local_files
+            ctx.bytes += local_bytes
+            ctx.errors += local_errors
+            node["size"] += local_bytes
+            node["files"] += local_files
+            node["mtime"] = local_mtime
+        if batch:
+            ctx.collectors.add_files(batch, ctx.drive)
         if depth < ctx.max_depth and not ctx.stop.is_set():
             kids = to_submit
             with ctx.lock:

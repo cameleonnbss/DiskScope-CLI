@@ -247,7 +247,7 @@ def render_csv(r: dict[str, Any]) -> str:
     w.writerow(["# Disques"])
     w.writerow(["mount", "label", "fs", "kind", "total", "used", "free"])
     for d in r.get("drives") or []:
-        w.writerow([d.get("mount"), d.get("label"), d.get("fs"), d.get("kind"),
+        w.writerow([d.get("mount"), d.get("label"), d.get("fstype"), d.get("kind"),
                     d.get("total", 0), d.get("total", 0) - d.get("free", 0),
                     d.get("free", 0)])
 

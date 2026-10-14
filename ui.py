@@ -34,7 +34,7 @@ except ImportError:  # pragma: no cover - rich is a hard dependency in practice
 
 APP_NAME = "DISKSCOPE CLI"
 APP_SUB = "Windows Storage Analyzer"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 # Windows consoles: force UTF-8 output and the ANSI (non-legacy) renderer
 # so unicode glyphs never crash on cp1252 code pages.
@@ -508,7 +508,7 @@ def tree_lines(root: dict[str, Any], max_depth: int = 3, max_children: int = 6) 
     def walk(node: dict[str, Any], depth: int, prefix: str) -> None:
         children = node.get("children") or []
         kids = sorted(children, key=lambda x: x.get("size", 0), reverse=True)[:max_children]
-        hidden = len([x for x in children if x not in kids])
+        hidden = len(children) - len(kids)
         for i, ch in enumerate(kids):
             last = i == len(kids) - 1
             conn = "└── " if last else "├── "

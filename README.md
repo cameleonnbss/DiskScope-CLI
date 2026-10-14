@@ -88,10 +88,46 @@ ui.py            rich-based rendering (banner, panels, bars, tables)
 safety.py        guards, trash deletion, dry-run mode
 trash_win.py      Windows Recycle Bin (ctypes + Shell) — Unicode/accents safe
 cache.py         persistent scan cache (atomic writes)
+tests/           pytest suite (safety, scanner, cache, filters, reports)
 ```
 
 ## Requirements
 
 - Windows 10 or 11 (works degraded elsewhere for development)
-- Python 3.10+ (3.14 tested)
+- Python 3.10+ (3.14/3.15 tested)
 - `rich`, `send2trash` (installed by `install.bat`)
+
+## Tests & CI
+
+A pytest suite covers the safety guards, the scanner, the cache, the
+filter mini-language, the duplicate finder and the report exporters:
+
+```bat
+pip install pytest
+python -m pytest tests -q
+```
+
+Every push runs the suite plus `--selftest` on **Windows and Linux** across
+Python 3.10 / 3.12 / 3.13 (`.github/workflows/ci.yml`).
+
+## Changelog
+
+### 2.1.0
+- **Security fix**: `is_protected()` compared an upper-cased path against a
+  lower-cased blocklist, so `Program Files`, `ProgramData`, `$Recycle.Bin`,
+  `System Volume Information`… were **never actually blocked** (only
+  `C:\Windows` was, via a string fallback). Now all protected names match.
+- **Fix**: menu 6 (Fichiers anciens) crashed with `TypeError`
+  (`build_old_view` was called with an unsupported `min_size` argument).
+- **Fix**: menu 6 `[C]` category view crashed with `ValueError`
+  (wrong tuple unpacking of `old_summary_by_category`).
+- **Fix**: Recycle Bin emptying failed on Python 3.10/3.11
+  (`ctypes.HRESULT` only exists on 3.12+).
+- **Fix**: CSV export always wrote an empty filesystem column
+  (`fs` key instead of `fstype`).
+- **Fix**: `/…` filters now honor `>=` and `<=` as inclusive bounds
+  (they silently behaved like `>` and `<`).
+- **Perf**: the scanner now aggregates per-directory stats with a single
+  lock acquisition instead of one per file (less contention on large trees).
+- **Tests + CI**: 54 new unit tests and a GitHub Actions matrix
+  (Windows + Linux × Python 3.10/3.12/3.13).
