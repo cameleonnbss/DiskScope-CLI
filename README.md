@@ -1,4 +1,7 @@
-# DiskScope CLI
+# DiskTop
+
+*(formerly “DiskScope CLI” — same engine, new logo; the repo, modules and cache
+path keep the old name so nothing breaks.)*
 
 [![CI](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml)
 
@@ -65,7 +68,7 @@ run.bat --empty-bin         empty the Recycle Bin (Windows API)
 - **No automatic deletion. Ever.** Every removal requires an explicit per-item confirmation.
 - **Dry run is the default**: nothing is touched until you disable it in `S` > `D`.
 - Deletions go to the **Recycle Bin** via `trash_win` (a ctypes + Windows Shell call that works even on accented profile paths like `C:\Users\caméléon`) with `send2trash` as fallback. Permanent delete only happens when the caller explicitly opts in.
-- Hard-blocked by `safety.py`: drive roots, `C:\Windows` + subfolders, `Program Files`, `ProgramData`, `..` traversal, relative paths, DiskScope's own folder, **and NTFS junctions/reparse points** (`Local Settings`, `Application Data`, …).
+- Hard-blocked by `safety.py`: drive roots, `C:\Windows` + subfolders, `Program Files`, `ProgramData`, `..` traversal, relative paths, the app's own folder, **and NTFS junctions/reparse points** (`Local Settings`, `Application Data`, …).
 - Unreadable directories are skipped cleanly; **junctions and symlinks are never followed during scans** — this fixes a bug where every file under a junction was counted twice (double-sized folders, phantom duplicates).
 - "Dernière utilisation" is only ever shown as an **estimate derived from file mtimes** and labelled as such — Windows does not expose true usage dates.
 
@@ -74,6 +77,11 @@ run.bat --empty-bin         empty the Recycle Bin (Windows API)
 - `os.scandir()` + a thread-pool per-directory walker; the GIL is released by OS calls so parallelism helps on NVMe.
 - Bounded-memory collectors keep only the top 500 biggest files and 30 000 old-file candidates.
 - Trees are compacted before caching; the JSON cache lives in `%LOCALAPPDATA%\DiskScope\cache.json` and makes menu switching instant.
+- **Optional native accelerator:** if a C compiler is present, `run.bat` / `run.sh`
+  build `native/dufast` (from `native/dufast.c`) to size cache/temp folders faster.
+  It is used only when it exists and returns a positive size; otherwise the
+  pure-Python walker runs — so it can never change a reported number or break.
+  Disable it anytime with `DISKSCOPE_NO_NATIVE=1`.
 
 ## Project layout
 
@@ -87,21 +95,24 @@ steam.py         VDF/ACF parsing, library discovery
 epic.py          Epic .item manifests + .egstore fallback
 games.py         Battle.net / Ubisoft / EA / Riot / GOG / Xbox
 cleanup.py       SAFE / REVIEW / DANGER engine
-reports.py       report builder + txt/json/html export
-ui.py            rich-based rendering (banner, panels, bars, tables)
+reports.py       report builder + txt/json/html/csv export + offline insights
+ui.py            rich-based rendering (logo banner, panels, bars, tables)
 safety.py        guards, trash deletion, dry-run mode
 trash_win.py      Windows Recycle Bin (ctypes + Shell) — Unicode/accents safe
 cache.py         persistent scan cache (atomic writes)
-run.bat          one-file Windows launcher (bootstraps venv + deps)
+nativehelper.py  fail-safe bridge to the optional native accelerator
+native/dufast.c  optional C sizing helper (compiled by the launchers if gcc present)
+run.bat          one-file Windows launcher (bootstraps venv + deps + optional native)
 run.sh           one-file bash launcher (Git Bash / WSL / Linux / macOS)
-tests/           pytest suite (safety, scanner, cache, filters, reports)
+tests/           pytest suite (safety, scanner, cache, filters, reports, native, launchers)
 ```
 
 ## Requirements
 
 - Windows 10 or 11 (works degraded elsewhere for development)
 - Python 3.10+ (3.14/3.15 tested)
-- `rich`, `send2trash` (installed by `install.bat`)
+- `rich`, `send2trash` — auto-installed by `run.bat` / `run.sh` on first launch
+- Optional: a C compiler (`gcc`/`clang`) to build the native accelerator — not required
 
 ## Tests & CI
 
@@ -117,6 +128,26 @@ Every push runs the suite plus `--selftest` on **Windows and Linux** across
 Python 3.10 / 3.12 / 3.13 (`.github/workflows/ci.yml`).
 
 ## Changelog
+
+### 2.2.0
+- **New logo + DiskTop identity**: the block-art startup banner and the visible
+  product name are now **DiskTop**. Internal identifiers (GitHub repo, module
+  files, `%LOCALAPPDATA%\DiskScope` cache path) are unchanged on purpose so
+  nothing breaks.
+- **Offline report insights**: `reports.py` now derives a prioritised
+  **RECOMMANDATIONS** section (txt + html) straight from the real scan — full
+  drives, cleanable caches, system advisories, oldest big unused file, dominant
+  game launcher. No model, no API, no network: deterministic stdlib rules.
+- **Bug fix — app sizes**: `_measure_app_sizes()` was defined but never called,
+  so registry apps without `EstimatedSize` were always reported as *unknown*.
+  They are now measured on disk (bounded by a budget), giving real sizes in
+  the Applications menu.
+- **Optional native accelerator (C)**: `native/dufast.c` + `nativehelper.py`
+  speed up cache/temp folder sizing when a compiler is available. Strictly
+  opt-in: the launchers build it only if `gcc`/`clang` exists, it is used only
+  when it returns a positive size, and `DISKSCOPE_NO_NATIVE=1` or its absence
+  falls back to the Python walker — so it can never change a number or break.
+- **Tests**: +8 (insights, native fallback, launcher build guard) → 67 passing.
 
 ### 2.1.0
 - **One-file launchers**: `run.bat` now bootstraps everything itself (Python

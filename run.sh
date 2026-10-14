@@ -41,6 +41,15 @@ if ! "$VPY" -c "import rich, send2trash" >/dev/null 2>&1; then
     "$VPY" -m pip install -r requirements.txt
 fi
 
+# ---- 3b) optional native accelerator (best-effort; app works without it) ---
+if [ ! -x "native/dufast" ]; then
+    for cc in cc gcc clang; do
+        if command -v "$cc" >/dev/null 2>&1; then
+            "$cc" -O2 -o native/dufast native/dufast.c >/dev/null 2>&1 && break
+        fi
+    done
+fi
+
 # ---- 4) start the app ----------------------------------------------------- --
 export PYTHONIOENCODING=utf-8
 export PYTHONUTF8=1

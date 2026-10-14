@@ -86,7 +86,62 @@ def build_report(cache: dict[str, Any], drives: list[dict[str, Any]],
         }
     report["bigfiles"] = big[:5000]
     report["advisories"] = (cleanup or {}).get("advisories") or []
+    report["insights"] = build_insights(report)
     return report
+
+
+# --------------------------------------------------------------------------- #
+#  Offline recommendations (heuristic rules over the REAL scan data).
+#  No model, no API, no network - stdlib only, deterministic & testable.
+# --------------------------------------------------------------------------- #
+def build_insights(r: dict[str, Any]) -> list[tuple[str, str]]:
+    """Return a list of (level, text) actionable insights.
+
+    level is one of: "danger" (critical), "warn", "good", "info".
+    """
+    out: list[tuple[str, str]] = []
+    for d in r.get("drives") or []:
+        pct = d.get("pct") or 0.0
+        mount = d.get("mount", "?")
+        free = d.get("free", 0)
+        if pct >= 0.90:
+            out.append(("danger", f"{mount} saturé à {pct * 100:.0f}% "
+                                  f"({ui.human(free)} libres) : à libérer en priorité."))
+        elif pct >= 0.75:
+            out.append(("warn", f"{mount} à {pct * 100:.0f}% : {ui.human(free)} libres."))
+    cl = r.get("cleanup") or {}
+    if cl.get("safe_total"):
+        out.append(("good", f"~{ui.human(cl['safe_total'])} de caches/temp nettables "
+                            f"sans risque ({cl.get('safe_items', 0)} éléments, menu C/7)."))
+    if cl.get("review_total"):
+        out.append(("info", f"~{ui.human(cl['review_total'])} de vieux fichiers à "
+                            f"examiner avant suppression."))
+    for adv in (r.get("advisories") or [])[:3]:
+        out.append(("info", f"{adv.get('name', '')} : {ui.human(adv.get('size', 0) or 0)} "
+                            f"— {adv.get('advice', '')}"))
+    lf = r.get("largest_file")
+    if lf and (lf.get("size") or 0) >= 2 * 1024 ** 3:
+        out.append(("info", f"Plus gros fichier : {ui.human(lf['size'])} — {lf['path']}"))
+    ol = r.get("oldest_large_file")
+    if ol:
+        age = ui.human_age(max(0, time.time() - ol.get("mtime", 0)))
+        out.append(("info", f"Gros fichier inutilisé depuis {age} : {ol['path']}"))
+    gs = r.get("game_storage") or {}
+    if gs:
+        top = max(gs.items(), key=lambda kv: kv[1])
+        if top[1] > 0:
+            out.append(("info", f"Jeux : {ui.human(r.get('game_total', 0))} au total, "
+                                f"dominé par {top[0]}."))
+    tu = r.get("top_space_users") or []
+    if tu and (tu[0].get("size") or 0) > 0:
+        out.append(("info", f"Premier consommateur : {tu[0]['name']} "
+                            f"({ui.human(tu[0]['size'])})."))
+    if not out:
+        out.append(("good", "Aucun gros gaspillage détecté sur ce scan."))
+    return out
+
+
+_INS_MARK = {"danger": "[!]", "warn": "[~]", "good": "[+]", "info": "[-]"}
 
 
 # --------------------------------------------------------------------------- #
@@ -141,6 +196,12 @@ def render_text(r: dict[str, Any]) -> str:
         L.append("  aucun jeu détecté")
     L.append("")
     L.append(f"Applications détectées : {r['apps_count']}")
+    ins = r.get("insights") or build_insights(r)
+    if ins:
+        L.append("")
+        L.append("RECOMMANDATIONS")
+        for lvl, txt in ins:
+            L.append(f"  {_INS_MARK.get(lvl, '-')} {txt}")
     return "\n".join(L)
 
 
@@ -209,11 +270,18 @@ def render_html(r: dict[str, Any]) -> str:
         age = ui.human_age(max(0, time.time() - ol.get("mtime", 0)))
         ol_extra = f"<tr><th>Âge</th><td>modifié il y a {age}</td></tr>"
 
+    _ins_color = {"danger": "#ff7b7f", "warn": "#ffd479",
+                  "good": "#7bffb0", "info": "#9aa7ff"}
+    ins = r.get("insights") or build_insights(r)
+    insights_html = ("<h2>Recommandations</h2><ul>" + "".join(
+        f"<li style='color:{_ins_color.get(lvl, '#d8e0f0')}'>{e(txt)}</li>"
+        for lvl, txt in ins) + "</ul>") if ins else ""
+
     return f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
-<title>DiskScope - Storage Report</title><style>{_CSS}</style></head>
+<title>DiskTop - Storage Report</title><style>{_CSS}</style></head>
 <body>
-<h1>DiskScope CLI — Storage Report</h1>
+<h1>DiskTop — Storage Report</h1>
 <p>Généré le {e(r['generated'])} · dernier scan : {e(r['last_scan'])} ·
 durée du scan : {ui._fmt_dur(r['scan_duration'])}</p>
 
@@ -223,6 +291,7 @@ durée du scan : {ui._fmt_dur(r['scan_duration'])}</p>
 
 <h2>Top space users</h2>
 <table><tr><th>#</th><th>Catégorie</th><th>Taille</th><th>Chemin</th></tr>{top_rows()}</table>
+{insights_html}
 {cleanup_html}
 {file_block("Largest file", r.get("largest_file"))}
 {file_block("Oldest large file", ol, ol_extra)}

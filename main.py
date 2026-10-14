@@ -943,7 +943,7 @@ def selftest() -> int:
     check("all modules import", not failures)
     if failures:
         return 1
-    ui.ok("DiskScope est prêt. Lancez run.bat !")
+    ui.ok("DiskTop est prêt. Lancez run.bat !")
     return 0
 
 
@@ -971,7 +971,7 @@ def steam_parse_test() -> bool:
 def main() -> int:
     if os.name == "nt":
         os.system("")  # enable ANSI escape sequences on legacy conhost
-    parser = argparse.ArgumentParser(prog="DiskScope CLI",
+    parser = argparse.ArgumentParser(prog="DiskTop",
                                      description="Windows Storage Analyzer")
     parser.add_argument("--scan", action="store_true", help="full scan then exit summary")
     parser.add_argument("--quick", action="store_true", help="quick drive overview")
@@ -982,7 +982,7 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true", help="verify installation")
     parser.add_argument("--empty-bin", action="store_true",
                         help="vide la corbeille (Recycle Bin) via l'API Windows")
-    parser.add_argument("--version", action="version", version=f"DiskScope CLI {APP_VERSION}")
+    parser.add_argument("--version", action="version", version=f"DiskTop {APP_VERSION}")
     args = parser.parse_args()
 
     app = App(use_cache=not args.no_cache)

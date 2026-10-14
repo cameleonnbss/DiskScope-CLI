@@ -19,6 +19,7 @@ from typing import Any
 import files as files_mod
 import scanner
 import safety
+import nativehelper
 import ui
 
 HOME = os.path.expanduser("~")
@@ -70,6 +71,13 @@ def _dir_stats(path: str, stop=None) -> tuple[int, int]:
             return os.path.getsize(path), 1
         except OSError:
             return 0, 0
+    # Optional native accelerator (native/dufast.c) - faster sizing for the
+    # cache/temp folders measured here. It is used only when a built binary is
+    # present AND returns a positive size; otherwise we fall back to the Python
+    # walker, so the reported number is never wrong because of the native path.
+    nd = nativehelper.native_du(path)
+    if nd:
+        return nd
     return scanner.dir_size(path, stop=stop)
 
 

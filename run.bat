@@ -57,6 +57,10 @@ if errorlevel 1 (
     )
 )
 
+rem ---- 3b) optional native accelerator (best-effort; app works without it) --
+where gcc >nul 2>nul
+if not errorlevel 1 if not exist "native\dufast.exe" gcc -O2 -o native\dufast.exe native\dufast.c >nul 2>nul
+
 rem ---- 4) start the app --------------------------------------------------- --
 set "PYTHONIOENCODING=utf-8"
 set "PYTHONUTF8=1"

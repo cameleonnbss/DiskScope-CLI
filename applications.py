@@ -234,6 +234,10 @@ def detect_apps(stop=None, include_store: bool = True) -> list[dict[str, Any]]:
             if (a.get("size") or 0) > (cur.get("size") or 0):
                 merged[key] = a
     out = list(merged.values())
+    # Registry EstimatedSize is frequently missing/stale; the helper that
+    # measures those InstallLocations on disk was defined but never called,
+    # so unknown-size apps were reported as size=None. Run it here (bounded).
+    _measure_app_sizes([a for a in out if a.get("size_source") != "disk"], stop=stop)
     out.sort(key=lambda a: (-(a.get("size") or 0), a["name"].lower()))
     return out
 

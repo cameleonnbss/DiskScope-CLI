@@ -20,3 +20,7 @@ Desktop.ini
 .idea/
 .vscode/
 .freebuff/
+
+# Optional native accelerator binaries (built locally by run.bat / run.sh)
+native/dufast
+native/dufast.exe

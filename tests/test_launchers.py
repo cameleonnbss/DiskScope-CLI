@@ -30,6 +30,8 @@ def test_run_bat_is_self_containing():
     assert "-m venv" in txt
     assert "requirements.txt" in txt
     assert "main.py %*" in txt
+    # optional native accelerator build (best-effort, app works without it)
+    assert "dufast" in txt
 
 
 def test_install_bat_delegates_to_run_bat():
@@ -56,3 +58,4 @@ def test_run_sh_mirrors_the_bootstrap():
     assert "-m venv" in txt
     assert "requirements.txt" in txt
     assert 'main.py "$@"' in txt
+    assert "dufast" in txt

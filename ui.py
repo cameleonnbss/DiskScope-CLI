@@ -32,9 +32,9 @@ try:
 except ImportError:  # pragma: no cover - rich is a hard dependency in practice
     RICH = False
 
-APP_NAME = "DISKSCOPE CLI"
+APP_NAME = "DISKTOP"
 APP_SUB = "Windows Storage Analyzer"
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 
 # Windows consoles: force UTF-8 output and the ANSI (non-legacy) renderer
 # so unicode glyphs never crash on cp1252 code pages.
@@ -160,10 +160,13 @@ def severity_color(ratio: float) -> str:
 #  Banner
 # --------------------------------------------------------------------------- #
 BANNER = r"""
-   ___  _  _  ____  ____  _  _  ____  ____     _  _  ____
-  / __)/ )( \(  _ \(_  _)/ )( \(  _ \(  __)   / )( \(  _ \
- ( (__ ) __ ( ) __/  )(  ) __ ( ) __/ ) _)    ) __ ( )   /
-  \___)_)(_(_)__)   (__)_)(_)(_)(__)  (__)   (_)(_/(__\_)
+    █▄                 █▄
+    ██ ▀▀       ▄▄    ▄██▄
+ ▄████ ██ ▄██▀█ ██ ▄█▀ ██ ▄███▄ ████▄
+ ██ ██ ██ ▀███▄ ████   ██ ██ ██ ██ ██
+▄█▀███▄███▄▄██▀▄██ ▀█▄▄██▄▀███▀▄████▀
+                                ██
+                                ▀
 """
 
 

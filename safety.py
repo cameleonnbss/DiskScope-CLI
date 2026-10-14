@@ -230,7 +230,7 @@ def validate_delete_path(path: str) -> tuple[bool, str]:
         return False, why
     # Refuse paths directly inside the app's own folder
     if _norm(raw).startswith(_norm(os.path.dirname(os.path.abspath(__file__)))):
-        return False, "fichiers de DiskScope lui-même"
+        return False, "fichiers de DiskTop lui-même"
     return True, ""
 
 
