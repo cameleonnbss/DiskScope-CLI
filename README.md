@@ -53,15 +53,16 @@ python main.py --report html      build & export report.html
 python main.py --search iso       one-shot search
 python main.py --no-cache         ignore saved cache
 python main.py --selftest         verify installation
+python main.py --empty-bin        empty the Recycle Bin (Windows API)
 ```
 
 ## Safety model
 
 - **No automatic deletion. Ever.** Every removal requires an explicit per-item confirmation.
 - **Dry run is the default**: nothing is touched until you disable it in `S` > `D`.
-- Deletions go to the **Recycle Bin** via `send2trash` (permanent delete only if it is unavailable, after a second confirmation).
-- Hard-blocked by `safety.py`: drive roots, `C:\Windows` + subfolders, `Program Files`, `ProgramData`, `..` traversal, relative paths, DiskScope's own folder.
-- Unreadable directories are skipped cleanly; junctions/symlinks are never followed during scans.
+- Deletions go to the **Recycle Bin** via `trash_win` (a ctypes + Windows Shell call that works even on accented profile paths like `C:\Users\caméléon`) with `send2trash` as fallback. Permanent delete only happens when the caller explicitly opts in.
+- Hard-blocked by `safety.py`: drive roots, `C:\Windows` + subfolders, `Program Files`, `ProgramData`, `..` traversal, relative paths, DiskScope's own folder, **and NTFS junctions/reparse points** (`Local Settings`, `Application Data`, …).
+- Unreadable directories are skipped cleanly; **junctions and symlinks are never followed during scans** — this fixes a bug where every file under a junction was counted twice (double-sized folders, phantom duplicates).
 - "Dernière utilisation" is only ever shown as an **estimate derived from file mtimes** and labelled as such — Windows does not expose true usage dates.
 
 ## Performance notes
@@ -85,6 +86,7 @@ cleanup.py       SAFE / REVIEW / DANGER engine
 reports.py       report builder + txt/json/html export
 ui.py            rich-based rendering (banner, panels, bars, tables)
 safety.py        guards, trash deletion, dry-run mode
+trash_win.py      Windows Recycle Bin (ctypes + Shell) — Unicode/accents safe
 cache.py         persistent scan cache (atomic writes)
 ```
 

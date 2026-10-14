@@ -95,6 +95,8 @@ def find_safe_items(stop=None, max_items: int = 60) -> list[dict[str, Any]]:
             if mkey in seen:
                 continue
             seen.add(mkey)
+            if safety.path_crosses_reparse_point(m):
+                continue
             ok, _why = safety.validate_delete_path(m)
             if not ok:
                 continue  # protected -> never listed as SAFE
@@ -126,7 +128,12 @@ def find_review_items(oldfiles: list[dict[str, Any]], stop=None,
         age_days = int((now - mtime) / 86400) if mtime else 0
         if size < REVIEW_MIN_SIZE or age_days < REVIEW_MIN_AGE_DAYS:
             continue
-        ok, _why = safety.validate_delete_path(f.get("path", ""))
+        path = f.get("path", "")
+        # le cache peut dater d'avant le correctif jonctions : on re-teste
+        # le chemin complet pour ne jamais proposer un doublon fantome
+        if safety.path_crosses_reparse_point(path):
+            continue
+        ok, _why = safety.validate_delete_path(path)
         if not ok:
             continue
         cat = files_mod.classify_file(f)
@@ -241,7 +248,7 @@ def find_express_items(cache: dict[str, Any], drives: list[dict[str, Any]],
                 with os.scandir(p) as it:
                     for e in it:
                         try:
-                            if e.is_symlink():
+                            if e.is_symlink() or safety.is_reparse_entry(e):
                                 continue
                             if e.is_dir(follow_symlinks=False):
                                 if not safety.should_skip_dir(e.name):
@@ -263,6 +270,8 @@ def find_express_items(cache: dict[str, Any], drives: list[dict[str, Any]],
                 break
         candidates.sort(key=lambda x: x["size"], reverse=True)
         for c in candidates[:downloads_limit]:
+            if safety.path_crosses_reparse_point(c["path"]):
+                continue
             ok, _why = safety.validate_delete_path(c["path"])
             if ok:
                 c["reason"] = "téléchargement"
@@ -361,7 +370,7 @@ def system_advisories(drives: list[dict[str, Any]], stop=None) -> list[dict[str,
 def build_cleanup_report(cache: dict[str, Any], stop=None,
                          drives: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     safe = find_safe_items(stop=stop)
-    review = find_review_items(cache.get("oldfiles", []), stop=stop)
+    review = find_review_items(cache.get("oldfiles", []), stop=stop, limit=300)
     safe_total = sum(x["size"] for x in safe)
     review_total = sum(x["size"] for x in review)
     advisories = system_advisories(drives or [], stop=stop) if drives else []

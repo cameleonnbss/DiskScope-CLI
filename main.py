@@ -8,6 +8,7 @@ or use flags for one-shot commands:
   python main.py --report html   build + export report
   python main.py --search steam  quick search from the command line
   python main.py --selftest      verify the installation (used by install.bat)
+  python main.py --empty-bin     empty the Recycle Bin (Windows API)
 """
 from __future__ import annotations
 
@@ -29,6 +30,11 @@ import scanner
 import ui
 
 APP_VERSION = ui.APP_VERSION
+
+# Combien de gros fichiers on conserve dans le cache et les rapports.
+# L'ancien plafond de 500 (puis 200 dans reports.py) faisait disparaître
+# des dossiers entiers (Downloads = 184 Go n'apparaissait qu'à 72 Go).
+BIG_KEEP = 5000
 
 
 class App:
@@ -81,7 +87,7 @@ class App:
             if quick:
                 continue
             ui.console.print(c_scan_head(mount))
-            collectors = scanner.Collectors(big_keep=500, old_min_size=1024 * 1024)
+            collectors = scanner.Collectors(big_keep=BIG_KEEP, old_min_size=1024 * 1024)
             tree = None
             stats: dict[str, Any] = {}
             with ui.ScanProgress(label=f"Scan {mount}") as prog:
@@ -121,7 +127,7 @@ class App:
                     dedup_old.append(f)
             self.cache["trees"] = trees
             self.cache["top_folders"] = tops
-            self.cache["bigfiles"] = all_big[:500]
+            self.cache["bigfiles"] = all_big[:BIG_KEEP]
             self.cache["oldfiles"] = dedup_old[:30000]
             cache_mod.update_meta(self.cache, duration=duration, files=total_files,
                                   quick=quick)
@@ -867,6 +873,25 @@ def main_menu(app: App) -> None:
             ui.press_enter()
 
 
+def _junction_selftest(safety_mod) -> bool:
+    """Vérifie que les points de jonction sont détectés puis refusés.
+
+    Retourne True si la protection fonctionne, ou si la machine n'a
+    aucune jonction à tester (rien à vérifier dans ce cas).
+    """
+    profile = os.path.expanduser("~")
+    for name in ("Local Settings", "Application Data"):
+        p = os.path.join(profile, name)
+        if not os.path.lexists(p):
+            continue
+        if not safety_mod.is_reparse_point(p):
+            return False
+        ok, why = safety_mod.validate_delete_path(p)
+        if ok or "jonction" not in why:
+            return False
+    return True
+
+
 def selftest() -> int:
     """Used by install.bat to verify the installation."""
     failures: list[str] = []
@@ -882,6 +907,7 @@ def selftest() -> int:
     check("safety: drive root refused", not safety.validate_delete_path("C:\\")[0])
     check("safety: windows refused", not safety.validate_delete_path("C:\\Windows\\System32")[0])
     check("safety: traversal refused", not safety.validate_delete_path("C:\\Users\\..\\..")[0])
+    check("safety: junction refused", _junction_selftest(safety))
     # cache roundtrip in an ISOLATED temp file - never touch the real cache
     import tempfile
     tmp = os.path.join(tempfile.gettempdir(), "diskscope_selftest_cache.json")
@@ -953,6 +979,8 @@ def main() -> int:
     parser.add_argument("--search", metavar="TERM", help="one-shot search")
     parser.add_argument("--no-cache", action="store_true", help="ignore saved cache")
     parser.add_argument("--selftest", action="store_true", help="verify installation")
+    parser.add_argument("--empty-bin", action="store_true",
+                        help="vide la corbeille (Recycle Bin) via l'API Windows")
     parser.add_argument("--version", action="version", version=f"DiskScope CLI {APP_VERSION}")
     args = parser.parse_args()
 
@@ -978,6 +1006,13 @@ def main() -> int:
             return 0
         if args.search:
             view_search(app, args.search)
+            return 0
+        if args.empty_bin:
+            ok, msg = cleanup.empty_recycle_bin()
+            if ok:
+                ui.ok(msg)
+            else:
+                ui.warn(msg)
             return 0
         main_menu(app)
         return 0

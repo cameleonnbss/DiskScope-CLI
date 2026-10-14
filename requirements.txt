@@ -1,2 +1,5 @@
 rich>=13.0.0
+# send2trash is an optional fallback. On Windows, deletion uses the built-in
+# trash_win module (ctypes + Shell), which works on accented profile paths
+# like C:\Users\caméléon where send2trash fails.
 send2trash>=1.8.0

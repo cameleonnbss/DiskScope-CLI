@@ -81,10 +81,10 @@ def build_report(cache: dict[str, Any], drives: list[dict[str, Any]],
             "review_total": cleanup.get("review_total", 0),
             "safe_items": len(cleanup.get("safe", [])),
             "review_items": len(cleanup.get("review", [])),
-            "safe": (cleanup.get("safe") or [])[:200],
-            "review": (cleanup.get("review") or [])[:200],
+            "safe": (cleanup.get("safe") or [])[:500],
+            "review": (cleanup.get("review") or [])[:500],
         }
-    report["bigfiles"] = big[:200]
+    report["bigfiles"] = big[:5000]
     report["advisories"] = (cleanup or {}).get("advisories") or []
     return report
 

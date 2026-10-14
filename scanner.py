@@ -113,6 +113,10 @@ def _worker(ctx: _Ctx, pool: ThreadPoolExecutor, node: dict[str, Any],
             try:
                 if e.is_symlink():
                     continue
+                # junctions (ex: Local Settings -> AppData\Local) are NOT
+                # symlinks: without this check the same file is counted twice
+                if safety.is_reparse_entry(e):
+                    continue
                 if e.is_file(follow_symlinks=False):
                     st = e.stat(follow_symlinks=False)
                     size = st.st_size
@@ -235,7 +239,7 @@ def dir_size(path: str, *, max_files: int | None = None,
                     if stop is not None and stop.is_set():
                         return total, count
                     try:
-                        if e.is_symlink():
+                        if e.is_symlink() or safety.is_reparse_entry(e):
                             continue
                         if e.is_file(follow_symlinks=False):
                             total += e.stat(follow_symlinks=False).st_size
@@ -257,7 +261,7 @@ def dir_size(path: str, *, max_files: int | None = None,
                         if stop is not None and stop.is_set():
                             return total, count
                         try:
-                            if e.is_symlink():
+                            if e.is_symlink() or safety.is_reparse_entry(e):
                                 continue
                             if e.is_file(follow_symlinks=False):
                                 total += e.stat(follow_symlinks=False).st_size
@@ -287,6 +291,7 @@ def top_level_sizes(path: str, *, stop: threading.Event | None = None,
         with os.scandir(path) as it:
             entries = [e for e in it if e.is_dir(follow_symlinks=False)
                        and not e.is_symlink()
+                       and not safety.is_reparse_entry(e)
                        and not safety.should_skip_dir(e.name)]
     except OSError:
         return out

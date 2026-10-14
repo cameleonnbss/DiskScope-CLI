@@ -23,6 +23,110 @@ except ImportError:
     send2trash = None  # type: ignore[assignment]
     HAS_TRASH = False
 
+
+def _trash_path(path: str) -> tuple[bool, str]:
+    """Send *path* to the Recycle Bin, robustly.
+
+    Order of preference:
+      1. ``trash_win`` (ctypes + Shell) — Unicode/accents safe, Windows only.
+      2. ``send2trash`` — the cross-platform fallback.
+
+    Returns ``(ok, detail)``. Never performs a permanent delete by itself;
+    that is handled by the caller only when explicitly opted in.
+    """
+    if os.name == "nt":
+        try:
+            import trash_win
+            ok, msg = trash_win.send_to_trash(path)
+            if ok:
+                return True, "corbeille (shell)"
+        except Exception:  # noqa: BLE001
+            pass
+    if HAS_TRASH:
+        try:
+            send2trash(path)
+            return True, "corbeille"
+        except Exception:  # noqa: BLE001
+            pass
+    return False, "aucune corbeille disponible"
+
+# --------------------------------------------------------------------------- #
+#  Reparse points / junctions (double-counting protection)
+# --------------------------------------------------------------------------- #
+FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+
+
+def is_reparse_point(path: str) -> bool:
+    """True for symlinks and NTFS junction points.
+
+    Junctions (e.g. C:\\Users\\X\\Local Settings -> AppData\\Local) are
+    reparse points, NOT symlinks: os.path.islink() returns False for them,
+    which used to make the scanner count every file twice. Any reparse
+    point must be skipped while scanning and must never be handed to the
+    delete engine.
+    """
+    if not os.path.lexists(path):
+        return False
+    try:
+        if os.path.islink(path):
+            return True
+    except OSError:
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))  # type: ignore[attr-defined]
+        if attrs == 0xFFFFFFFF:  # INVALID_FILE_ATTRIBUTES
+            return False
+        return bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT)
+    except Exception:
+        return False
+
+
+def is_reparse_entry(entry: os.DirEntry) -> bool:
+    """Same test for an os.DirEntry, without extra syscalls."""
+    try:
+        if entry.is_symlink():
+            return True
+    except OSError:
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        return entry.is_junction()  # Python 3.12+
+    except (AttributeError, OSError):
+        pass
+    try:
+        return bool(entry.stat(follow_symlinks=False).st_file_attributes
+                    & FILE_ATTRIBUTE_REPARSE_POINT)
+    except (AttributeError, OSError):
+        return False
+
+
+def path_crosses_reparse_point(path: str) -> bool:
+    """True si un composant du chemin est un point de jonction / lien.
+
+    Différent de is_reparse_point(path) : ici on teste TOUT le chemin.
+    Un fichier situé dans C:\\Users\\X\\Local Settings\\... existe bel et
+    bien, mais on y accède via la jonction -> le compter revient à compter
+    deux fois le fichier physique réel dans AppData. Ces chemins doivent
+    être ignorés en lecture comme en suppression.
+    """
+    try:
+        p = os.path.abspath(os.path.normpath(str(path)))
+    except (ValueError, OSError):
+        return False
+    drive, tail = os.path.splitdrive(p)
+    parts = [x for x in tail.replace("/", "\\").split("\\") if x]
+    cur = drive + "\\" if drive else "\\"
+    for part in parts:
+        cur = os.path.join(cur, part)
+        if is_reparse_point(cur):
+            return True
+    return False
+
+
 # --------------------------------------------------------------------------- #
 #  Protected locations
 # --------------------------------------------------------------------------- #
@@ -105,6 +209,10 @@ def validate_delete_path(path: str) -> tuple[bool, str]:
         return False, "le chemin n'existe plus (déjà supprimé ?)"
     if is_drive_root(raw):
         return False, "suppression d'une racine de disque interdite"
+    if is_reparse_point(raw):
+        return False, "point de jonction / lien (pas un vrai dossier)"
+    if path_crosses_reparse_point(raw):
+        return False, "chemin passant par une jonction (double comptage)"
     protected, why = is_protected(raw)
     if protected:
         return False, why
@@ -122,6 +230,7 @@ class Deleter:
 
     def __init__(self, dry_run: bool = True):
         self.dry_run = dry_run
+        self.allow_permanent = False  # opt-in: only when user explicitly wants it
         self.log: list[tuple[str, str, str]] = []  # (path, status, detail)
         self.bytes_freed = 0
         self.bytes_planned = 0
@@ -132,36 +241,34 @@ class Deleter:
         if not ok:
             self.log.append((path, "REFUSED", why))
             return False, f"Refusé : {why}"
-        crit, why_c = is_user_critical(path)
-        if crit and not self.dry_run:
-            # user-critical paths always need the explicit per-item confirm
-            # which the caller already provided; keep a marker in the log.
-            pass
         if self.dry_run:
             self.bytes_planned += size
             self.log.append((path, "DRY-RUN", reason))
             return True, "simulé (dry run)"
-        try:
-            if HAS_TRASH:
-                send2trash(path)
-                status = "TRASHED"
-            else:
-                # explicit fallback: permanent delete, send2trash missing
+        ok, detail = _trash_path(path)
+        if ok:
+            self.bytes_freed += size
+            self.log.append((path, "TRASHED", reason))
+            return True, "corbeille"
+        # permanent delete only when the caller explicitly opted in
+        if self.allow_permanent:
+            try:
                 if os.path.isdir(path) and not os.path.islink(path):
                     import shutil
                     shutil.rmtree(path, ignore_errors=False)
                 else:
                     os.remove(path)
-                status = "DELETED"
-            self.bytes_freed += size
-            self.log.append((path, status, reason))
-            return True, status.lower()
-        except PermissionError as e:
-            self.log.append((path, "DENIED", str(e)))
-            return False, "accès refusé (fermez l'application qui l'utilise)"
-        except OSError as e:
-            self.log.append((path, "ERROR", str(e)))
-            return False, f"erreur système : {e}"
+                self.bytes_freed += size
+                self.log.append((path, "DELETED", reason))
+                return True, "supprimé définitivement"
+            except PermissionError as e:
+                self.log.append((path, "DENIED", str(e)))
+                return False, "accès refusé (fermez l'application qui l'utilise)"
+            except OSError as e:
+                self.log.append((path, "ERROR", str(e)))
+                return False, f"erreur système : {e}"
+        self.log.append((path, "ERROR", detail))
+        return False, f"impossible de mettre à la corbeille : {detail}"
 
     def summary(self) -> str:
         done = len([x for x in self.log if x[1] in ("TRASHED", "DELETED", "DRY-RUN")])
@@ -183,7 +290,11 @@ def safe_scandir(path: str) -> os.DirEntry:
 
 IGNORED_ON_SCAN = {"$recycle.bin", "system volume information", "$windows.~ws",
                    "$windows.~bt", "$getcurrent", "config.msi", "recovery",
-                   "msocache", "wuaudnld.vm", "swapfile.sys"}
+                   "msocache", "wuaudnld.vm", "swapfile.sys",
+                   # legacy profile junctions -> always point at AppData
+                   "local settings", "application data",
+                   # Windows Store / AppX junctions
+                   "microsoft.redirectionmanager", "application data"}
 
 
 def should_skip_dir(name: str) -> bool:

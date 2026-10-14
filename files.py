@@ -20,7 +20,9 @@ import safety
 # --------------------------------------------------------------------------- #
 CATEGORY_EXTS: dict[str, set[str]] = {
     "archives": {".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"},
-    "iso": {".iso", ".img", ".bin", ".mds", ".mdf", ".vhd", ".vhdx", ".nsp", ".xci"},
+    # .vhd/.vhdx volontairement absents : ce sont des disques de VM en
+    # service (WSL, Claude Desktop...) - jamais des déchets à supprimer.
+    "iso": {".iso", ".img", ".bin", ".mds", ".mdf", ".nsp", ".xci"},
     "installers": {".exe", ".msi", ".msix", ".appx", ".msu"},
     "videos": {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".flv"},
     "logs": {".log", ".etl", ".dmp", ".old"},
