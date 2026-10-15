@@ -6,6 +6,7 @@ path keep the old name so nothing breaks.)*
 [![CI](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml)
 [![Français](https://img.shields.io/badge/🇫🇷_Lire_en_Français-blue)](README_FR.md)
 [![Release](https://img.shields.io/badge/Download-DiskTop.exe-brightgreen)](https://github.com/cameleonnbss/DiskScope-CLI/releases/latest)
+[![GitHub](https://img.shields.io/badge/GitHub-cameleonnbss-181717?logo=github)](https://github.com/cameleonnbss)
 
 **Windows Storage Analyzer — 100 % command line, real data only.**
 Scan your drives, find what eats your space **and what eats your RAM**, locate old files, detect Steam / Epic / Battle.net / EA / Ubisoft / Riot / GOG games and review a safety-gated cleanup list.
@@ -22,7 +23,7 @@ Everything you see is computed from your actual disk **and live system memory**:
 | **2 — Quick analysis** | Drive overview + first-level folder sizes of C:, **parallel** across folders (thread pool) |
 | **3 — Applications** | Registry uninstall keys + AppData programs + Store apps, real measured sizes, honestly-flagged estimates |
 | **4 — Games** | Steam (`.acf` manifests), Epic (`.item`), Battle.net, Ubisoft Connect, EA App, Riot, GOG, Xbox — real local evidence only |
-| **5 — Big files** | Top files with adjustable threshold (>1 GB…>9 GB, or >100 MB) |
+| **5 — Big files** | Top files with adjustable threshold (>1 GB…>9 GB, or >100 MB), plus a **[T] break-down by file type** (what kind of data is eating your disk) |
 | **6 — Old files** | 30 d / 90 d / 180 d / 1 y / 2 y buckets + category breakdown (archives, ISO, installers, videos, logs, temp, builds) |
 | **D — Duplicates** | Duplicate finder over the biggest files: size + partial + full SHA-256, I/O-bounded; reports wasted space per group |
 | **C — Express cleanup** | One-stop cleanup: caches/temp, Recycle Bin (official Windows API), big files in Downloads with multi-select (`1,3-5`) — all confirmed before deletion |
@@ -30,7 +31,11 @@ Everything you see is computed from your actual disk **and live system memory**:
 | **8 — Report** | Full storage report, exportable to `report.txt`, `report.json`, `report.html`, `report.csv` (Excel-friendly) |
 | **9 — Search** | `/large 10GB`, `/old 1year`, `/files .iso`, `/drive D:`, plain text search |
 | **M — RAM & Tasks** | Live memory pressure, biggest RAM consumers, logon startup items and running services (native C++ core, ctypes fallback) + a safe "trim this app's working set" action |
-| **S — Settings** | Dry-run toggle, cache clear, rescan, Store apps on/off, **language** |
+| **S — Settings** | Dry-run toggle, cache clear, rescan, Store apps on/off, **language**, and **[G] open the project's GitHub page** |
+
+The dashboard uses a **colour-coded menu** (analysis, cleanup, inventory and RAM
+grouped by colour) and shows a **GitHub redirect** in the footer of every main
+screen, so the source is always one key away ([S] → G, or `--github`).
 
 ## Run — one file, everything bootstraps itself
 
@@ -64,6 +69,7 @@ run.bat --search iso        one-shot search
 run.bat --no-cache          ignore saved cache
 run.bat --selftest          verify installation
 run.bat --empty-bin         empty the Recycle Bin (Windows API)
+run.bat --github            open this project's GitHub page in your browser
 run.bat --lang fr           start in French (en · fr · es · de · it)
 ```
 
@@ -97,7 +103,7 @@ pip install pyinstaller
 build_exe.bat                REM produces dist\DiskTop.exe
 ```
 
-Each tagged release (e.g. `v2.4.0`) is built and uploaded automatically by
+Each tagged release (e.g. `v2.5.0`) is built and uploaded automatically by
 `.github/workflows/release.yml`, so the executable is attached to the GitHub
 **Releases** page as a downloadable asset. The optional native C++ core is
 bundled when a compiler was available; otherwise the pure-Python path runs.
@@ -205,6 +211,20 @@ Every push runs the suite plus `--selftest` on **Windows and Linux** across
 Python 3.10 / 3.12 / 3.13 (`.github/workflows/ci.yml`).
 
 ## Changelog
+
+### 2.5.0
+- **GitHub redirect, everywhere**: the main menu now carries a colour-coded key set
+  (analysis · cleanup · inventory · RAM grouped by colour) and a **GitHub footer**,
+  Settings gains **[G] Open GitHub page**, and there is a one-shot `--github` flag.
+  Uses stdlib `webbrowser`, is fully best-effort (never crashes on a headless box —
+  it just prints the URL) and points at `github.com/cameleonnbss/DiskScope-CLI`.
+- **"Space by file type"**: Big files ([5]) gained a **[T]** action that aggregates
+  the cached big + old files by content category (videos, archives, ISOs, installers,
+  downloads, builds, logs, other) so you can see *what kind of data* fills the disk,
+  not just which files are largest (`files.space_by_type`, de-duplicated, size-sorted).
+- **Menu polish**: the header panel now shows `DISKTOP · vX` with the tagline as a
+  subtitle. New selftest checks (github redirect, space-by-type) and 4 new tests
+  (79 total); all user-facing strings added across `en · fr · es · de · it`.
 
 ### 2.4.0
 - **Native C++ core (`dtk`)**: a real cross-platform C++ engine under `native/`

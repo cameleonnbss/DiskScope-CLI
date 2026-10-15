@@ -3,7 +3,7 @@
 
 namespace dtk {
 /* Keep this in sync with ui.APP_VERSION; it is the native core's own stamp. */
-static const char *DTK_VERSION = "2.4.0";
+static const char *DTK_VERSION = "2.5.0";
 }
 
 int dtk::cmd_version() {

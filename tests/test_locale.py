@@ -59,7 +59,8 @@ def test_t_interpolation_and_bad_placeholder():
 
 def test_every_language_has_the_core_keys():
     core = ("menu_scan", "settings_line", "rep_recommendations", "ins_full",
-            "st_title", "selftest_ready")
+            "st_title", "selftest_ready", "menu_github", "st_github",
+            "vw_type_title")
     for code, _name in i18n.LANGS:
         for key in core:
             assert key in i18n._CATALOG[code], f"{code} missing {key}"

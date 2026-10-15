@@ -162,3 +162,27 @@ def test_find_duplicates_no_false_positive(tmp_path):
     big = [{"path": p, "size": os.path.getsize(p), "mtime": 0} for p in (a, b)]
     res = files_mod.find_duplicates(big, min_size=10)
     assert not res["groups"]
+
+
+# --------------------------------------------------------------------------- #
+#  Space-by-type breakdown
+# --------------------------------------------------------------------------- #
+def test_space_by_type_groups_and_dedups():
+    items = [
+        {"path": "C:\\vid\\a.mp4", "size": 100, "ext": ".mp4"},
+        {"path": "C:\\vid\\b.mkv", "size": 50, "ext": ".mkv"},
+        {"path": "C:\\zip\\x.zip", "size": 10, "ext": ".zip"},
+        {"path": "C:\\vid\\a.mp4", "size": 100, "ext": ".mp4"},  # dup path
+    ]
+    rows = files_mod.space_by_type(items)
+    as_map = {cat: (n, sz) for cat, n, sz in rows}
+    assert as_map["videos"] == (2, 150)      # dedup keeps one a.mp4
+    assert as_map["archives"] == (1, 10)
+    assert rows[0][0] == "videos"            # sorted by size desc
+
+
+def test_space_by_type_empty_and_limit():
+    assert files_mod.space_by_type([]) == []
+    many = [{"path": f"C:\\f{i}.mp4", "size": i, "ext": ".mp4"} for i in range(5)]
+    many += [{"path": "C:\\z.zip", "size": 999, "ext": ".zip"}]
+    assert len(files_mod.space_by_type(many, limit=1)) == 1

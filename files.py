@@ -232,6 +232,29 @@ def old_summary_by_category(oldfiles: list[dict[str, Any]], min_age_days: int) -
                   key=lambda x: (order.get(x[0], 9), -x[2]))
 
 
+def space_by_type(items: list[dict[str, Any]], limit: int = 0) -> list[tuple[str, int, int]]:
+    """Group already-cached files by content category -> (cat, count, bytes).
+
+    Unlike ``old_summary_by_category`` this ignores age: it answers "what kind
+    of data is eating my disk" over any set of files (typically the big+old
+    collectors' output). De-duplicated by path, sorted by total size (largest
+    first). Purely read-only aggregation of data already in the cache.
+    """
+    buckets: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
+    seen: set[str] = set()
+    for f in items or []:
+        path = f.get("path") or ""
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        cat = classify_file(f)
+        buckets[cat][0] += 1
+        buckets[cat][1] += f.get("size", 0)
+    rows = sorted(((cat, n, sz) for cat, (n, sz) in buckets.items()),
+                  key=lambda x: x[2], reverse=True)
+    return rows[:limit] if limit else rows
+
+
 # --------------------------------------------------------------------------- #
 #  Command parsing for search ("/large 10GB", "/old 1year", "/files .iso"...)
 # --------------------------------------------------------------------------- #

@@ -7,6 +7,7 @@ modules et le chemin du cache gardent l'ancien nom pour ne rien casser.)*
 
 [![CI](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/cameleonnbss/DiskScope-CLI/actions/workflows/ci.yml)
 [![Télécharger](https://img.shields.io/badge/T%C3%A9l%C3%A9charger-DiskTop.exe-brightgreen)](https://github.com/cameleonnbss/DiskScope-CLI/releases/latest)
+[![GitHub](https://img.shields.io/badge/GitHub-cameleonnbss-181717?logo=github)](https://github.com/cameleonnbss)
 
 **Analyseur de stockage Windows — 100 % en ligne de commande, données réelles uniquement.**
 Analysez vos disques, trouvez ce qui mange votre espace **et ce qui mange votre RAM**, repérez les fichiers anciens, détectez les jeux Steam / Epic / Battle.net / EA / Ubisoft / Riot / GOG et passez en revue une liste de nettoyage sous double validation.
@@ -23,7 +24,7 @@ Tout ce qui s'affiche est calculé à partir de votre disque réel **et de la m�
 | **2 — Analyse rapide** | Vue d'ensemble des disques + tailles des dossiers de premier niveau de C:, **en parallèle** (pool de threads) |
 | **3 — Applications** | Clés de désinstallation du registre + programmes AppData + applis du Store, tailles réelles mesurées, estimations honnêtement signalées |
 | **4 — Jeux** | Steam (manifestes `.acf`), Epic (`.item`), Battle.net, Ubisoft Connect, EA App, Riot, GOG, Xbox — preuves locales réelles seulement |
-| **5 — Gros fichiers** | Fichiers les plus volumineux avec seuil réglable (>1 Go…>9 Go, ou >100 Mo) |
+| **5 — Gros fichiers** | Fichiers les plus volumineux avec seuil réglable (>1 Go…>9 Go, ou >100 Mo), plus une **[T] répartition par type de fichier** (quelle sorte de données occupe le disque) |
 | **6 — Fichiers anciens** | Paliers 30 j / 90 j / 180 j / 1 an / 2 ans + répartition par catégorie (archives, ISO, installateurs, vidéos, logs, temp, builds) |
 | **D — Doublons** | Détecteur de doublons sur les plus gros fichiers : taille + SHA-256 partiel puis complet ; espace gaspillé par groupe |
 | **C — Nettoyage express** | Nettoyage en un endroit : caches/temp, Corbeille (API Windows officielle), gros fichiers des Téléchargements avec sélection multiple (`1,3-5`) — tout confirmé avant suppression |
@@ -31,7 +32,12 @@ Tout ce qui s'affiche est calculé à partir de votre disque réel **et de la m�
 | **8 — Rapport** | Rapport de stockage complet, exportable en `report.txt`, `report.json`, `report.html`, `report.csv` (compatible Excel) |
 | **9 — Recherche** | `/large 10GB`, `/old 1year`, `/files .iso`, `/drive D:`, recherche en texte libre |
 | **M — RAM & Processus** | Pression mémoire en direct, plus gros consommateurs de RAM, éléments de démarrage (logon) et services en cours (noyau C++ natif, repli ctypes) + action sûre « libérer le jeu de travail de l'app » |
-| **S — Paramètres** | Bascule dry-run, purge du cache, rescan, applis Store on/off, **langue** |
+| **S — Paramètres** | Bascule dry-run, purge du cache, rescan, applis Store on/off, **langue**, et **[G] ouvrir la page GitHub du projet** |
+
+Le tableau de bord utilise un **menu codé par couleur** (analyse · nettoyage ·
+inventaire · RAM groupés par teinte) et affiche un **lien GitHub en pied de
+page** sur chaque écran principal : le code source est donc à une touche
+([S] → G, ou `--github`).
 
 ## Lancer — un seul fichier, tout s'auto-installe
 
@@ -114,6 +120,20 @@ absent. `DISKSCOPE_NO_NATIVE=1` le désactive. Le noyau est **en lecture seule**
 - Facultatif : `pyinstaller` pour construire le `DiskTop.exe` mono-fichier (`build_exe.bat`)
 
 ## Journal des modifications
+
+### 2.5.0
+- **Lien GitHub partout** : le menu principal est maintenant **codé par couleur**
+  (analyse · nettoyage · inventaire · RAM) avec un **lien GitHub en pied de page**,
+  les Paramètres gagnent **[G] Ouvrir la page GitHub**, et une option `--github`
+  en ligne de commande. S'appuie sur `webbrowser` (stdlib), entièrement best-effort :
+  sans navigateur, il affiche simplement l'URL au lieu de planter.
+- **« Espace par type de fichier »** : le menu Gros fichiers ([5]) propose un nouvel
+  **[T]** qui regroupe les fichiers gros + anciens par catégorie (vidéos, archives,
+  ISO, installateurs, téléchargements, builds, logs, autres) pour voir *quelle sorte
+  de données* remplit le disque, pas seulement les plus gros fichiers.
+- **Finitions** : l'en-tête affiche `DISKTOP · vX` avec le sous-titre ; nouvelles
+  vérifications d'auto-contrôle et 4 tests de plus (79 au total) ; tous les textes
+  ajoutés traduits en `en · fr · es · de · it`.
 
 ### 2.4.0
 - **Noyau natif C++ (`dtk`)** : un vrai moteur C++ multiplateforme sous `native/`

@@ -131,3 +131,25 @@ def test_tree_lines_counts_hidden():
     lines = ui.tree_lines(root, max_depth=1, max_children=3)
     joined = "\n".join(lines)
     assert "+7 more" in joined
+
+
+def test_github_link_and_open_url_guard():
+    # The project link must be a valid https URL.
+    assert ui.APP_GITHUB.startswith("https://github.com/")
+    # Non-http(s) input must never reach a browser and returns False.
+    assert ui.open_url("") is False
+    assert ui.open_url("not a url") is False
+    assert ui.open_url("file:///etc/passwd") is False
+
+
+def test_open_url_uses_browser_and_never_raises(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ui.webbrowser, "open",
+                        lambda url: calls.append(url) or True)
+    assert ui.open_url("https://example.com") is True
+    assert calls == ["https://example.com"]
+
+    def boom(_url):
+        raise RuntimeError("no browser")
+    monkeypatch.setattr(ui.webbrowser, "open", boom)
+    assert ui.open_url("https://example.com") is False  # failure is swallowed

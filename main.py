@@ -423,6 +423,7 @@ def view_big_files(app: App) -> None:
         total = sum(b["size"] for b in selected)
         ui.console.print(ui.c(i18n.t("vw_shown_total", v=ui.human(total)), "dim"))
         ui.console.print(ui.c(i18n.t("vw_big_help"), "dim"))
+        ui.console.print(ui.c(i18n.t("vw_big_type_hint"), "dim"))
         try:
             ch = input(ui.c("  " + i18n.t("st_choice"), "cyan")).strip().upper()
         except (EOFError, KeyboardInterrupt):
@@ -433,6 +434,18 @@ def view_big_files(app: App) -> None:
             app.settings["min_big_size"] = int(ch) * 1024 ** 3
         elif ch == "A":
             app.settings["min_big_size"] = 100 * 1024 * 1024
+        elif ch == "T":
+            # Break the cached files down by content type ("what is eating my disk").
+            pool = list(app.cache.get("bigfiles", [])) + list(app.cache.get("oldfiles", []))
+            rows = files_mod.space_by_type(pool)
+            if not rows:
+                ui.warn(i18n.t("vw_no_cache_scan"))
+            else:
+                ui.size_table([(files_mod.category_label(cat), sz,
+                                i18n.t("cache_files", n=f"{n:,}"))
+                               for cat, n, sz in rows[:20]],
+                              title=i18n.t("vw_type_title"))
+                ui.press_enter()
         elif ch == "E":
             idx = ui.choose_index(i18n.t("vw_big_explore"), len(selected))
             if idx:
@@ -902,6 +915,7 @@ def view_settings(app: App) -> None:
     ui.console.print("   " + i18n.t("st_store", state=store))
     name = i18n.LANG_NAMES.get(i18n.get_lang(), i18n.get_lang())
     ui.console.print("   " + i18n.t("st_lang", name=name))
+    ui.console.print("   " + i18n.t("st_github", url=ui.APP_GITHUB))
     ui.console.print(ui.c("   " + i18n.t("st_back"), "dim"))
     try:
         ch = input(ui.c("  " + i18n.t("st_choice") + " ", "cyan")).strip().upper()
@@ -923,6 +937,12 @@ def view_settings(app: App) -> None:
         app.settings["include_store_apps"] = not app.settings["include_store_apps"]
     elif ch == "L":
         change_language()
+    elif ch == "G":
+        # Owner's GitHub redirect: open the repo page, or print it if headless.
+        if ui.open_url(ui.APP_GITHUB):
+            ui.ok(i18n.t("gh_opened", url=ui.APP_GITHUB))
+        else:
+            ui.warn(i18n.t("gh_failed", url=ui.APP_GITHUB))
 
 
 # --------------------------------------------------------------------------- #
@@ -1057,6 +1077,10 @@ def selftest() -> int:
     import memory as _mem  # noqa: F401  import check
     check("memory backend", isinstance(_mem.native_active(), bool) and
           _mem.system_mem().get("total", 0) >= 0)
+    check("github redirect", bool(getattr(ui, "APP_GITHUB", "")) and
+          callable(getattr(ui, "open_url", None)) and not ui.open_url("not a url"))
+    check("space-by-type", hasattr(files_mod, "space_by_type") and
+          files_mod.space_by_type([{"path": "C:\\m\\movie.mp4", "size": 5}]) == [("videos", 1, 5)])
     check("all modules import", not failures)
     if failures:
         return 1
@@ -1100,6 +1124,7 @@ def main() -> int:
     parser.add_argument("--no-cache", action="store_true", help=i18n.t("ap_nocache"))
     parser.add_argument("--selftest", action="store_true", help=i18n.t("ap_selftest"))
     parser.add_argument("--empty-bin", action="store_true", help=i18n.t("ap_emptybin"))
+    parser.add_argument("--github", action="store_true", help=i18n.t("ap_github"))
     parser.add_argument("--lang", metavar="CODE", choices=[c for c, _ in i18n.LANGS],
                         help=i18n.t("ap_lang"))
     parser.add_argument("--version", action="version", version=f"DiskTop {APP_VERSION}")
@@ -1110,6 +1135,12 @@ def main() -> int:
     app = App(use_cache=not args.no_cache)
 
     try:
+        if args.github:
+            if ui.open_url(ui.APP_GITHUB):
+                ui.ok(i18n.t("gh_opened", url=ui.APP_GITHUB))
+            else:
+                ui.warn(i18n.t("gh_failed", url=ui.APP_GITHUB))
+            return 0
         if args.selftest:
             return selftest()
         if args.quick:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import sys
 import time
+import webbrowser
 from typing import Any, Callable, Iterable, Sequence
 
 import i18n
@@ -36,7 +37,13 @@ except ImportError:  # pragma: no cover - rich is a hard dependency in practice
 
 APP_NAME = "DISKTOP"
 APP_SUB = "Windows Storage Analyzer"
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
+
+# Author / project links. Surfaced in the menu footer and openable from the
+# Settings ([G]) and the --github flag; used only to hand the user a redirect
+# to the repository, never for anything automated or networked.
+APP_AUTHOR = "cameleonnbss"
+APP_GITHUB = "https://github.com/cameleonnbss/DiskScope-CLI"
 
 # Windows consoles: force UTF-8 output and the ANSI (non-legacy) renderer
 # so unicode glyphs never crash on cp1252 code pages.
@@ -157,6 +164,21 @@ def severity_color(ratio: float) -> str:
     return "green"
 
 
+def open_url(url: str) -> bool:
+    """Open an https URL in the user's default browser (best-effort redirect).
+
+    Purely optional convenience (the GitHub link, a store page...): it must
+    never crash the app, so every failure path returns False and the caller
+    falls back to printing the URL for a manual click.
+    """
+    if not (isinstance(url, str) and url.lower().startswith(("http://", "https://"))):
+        return False
+    try:
+        return bool(webbrowser.open(url))
+    except Exception:  # noqa: BLE001 - no browser / headless / locked-down host
+        return False
+
+
 # --------------------------------------------------------------------------- #
 #  Banner
 # --------------------------------------------------------------------------- #
@@ -231,6 +253,17 @@ MENU_ITEMS: list[tuple[str, str, str]] = [
     ("Q", "menu_quit", ""),
 ]
 
+# Colour each menu key by functional group so the main screen reads as a
+# tidy, colourful dashboard instead of a wall of identical yellow keys.
+# Keys not listed fall back to yellow.
+MENU_KEY_COLORS = {
+    "1": "cyan", "2": "cyan", "5": "cyan", "6": "cyan", "D": "cyan", "9": "cyan",
+    "C": "green", "7": "green",
+    "3": "magenta", "4": "magenta",
+    "M": "blue",
+    "S": "white", "Q": "grey",
+}
+
 
 def menu_rows() -> list[tuple[str, str, str]]:
     """Resolve the menu in the active language (label/description translated)."""
@@ -254,7 +287,8 @@ def show_menu(settings_line: str = "") -> str:
     if RICH:
         t = _menu_table()
         for key, label, desc in rows:
-            k = Text(f"[{key}]", style="bold yellow")
+            kc = MENU_KEY_COLORS.get(key, "yellow")
+            k = Text(f"[{key}]", style=f"bold {kc}")
             if key == "C":
                 label = Text(label, style="bold green")
             elif key == "Q":
@@ -262,14 +296,18 @@ def show_menu(settings_line: str = "") -> str:
             label = Text(label) if isinstance(label, str) else label
             d = Text(desc, style="grey70") if desc else Text("")
             t.add_row(k, label, d)
-        console.print(Panel(t, title=f"[bold cyan]{APP_NAME}[/]", border_style="cyan",
+        console.print(Panel(t, title=f"[bold cyan]{APP_NAME}[/]  [dim]v{APP_VERSION}[/]",
+                            subtitle=f"[dim]{APP_SUB}[/]", border_style="cyan",
                             width=78, padding=(0, 2)))
     else:
         print(c(f"  {APP_NAME.center(60)}", "cyan", True))
         for key, label, desc in rows:
-            print(f"  [{c(key, 'yellow', True)}] {label:<20} {c(desc, 'dim') if desc else ''}")
+            kc = MENU_KEY_COLORS.get(key, "yellow")
+            print(f"  [{c(key, kc, True)}] {label:<20} {c(desc, 'dim') if desc else ''}")
     if settings_line:
         console.print(c("  " + settings_line, "dim"))
+    # Owner's redirect to the source repository (informational footer).
+    console.print(c("  " + i18n.t("menu_github", url=APP_GITHUB), "grey"))
     try:
         return input(c("\n  " + i18n.t("sel_prompt") + " ", "cyan", True)).strip().upper()
     except (EOFError, KeyboardInterrupt):
